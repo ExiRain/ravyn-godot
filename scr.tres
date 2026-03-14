@@ -1,0 +1,21 @@
+[gd_resource type="JSON" format=3 uid="uid://cni83himd666b"]
+
+[resource]
+data = {
+"FileReferences": {
+"DisplayInfo": "lynx.cdi3.json",
+"Moc": "lynx.moc3",
+"Physics": "lynx.physics3.json",
+"Textures": ["lynx.1024/texture_00.png"]
+},
+"Groups": [{
+"Ids": ["ParamEyeLOpen", "ParamEyeROpen"],
+"Name": "EyeBlink",
+"Target": "Parameter"
+}, {
+"Ids": [],
+"Name": "LipSync",
+"Target": "Parameter"
+}],
+"Version": 3.0
+}

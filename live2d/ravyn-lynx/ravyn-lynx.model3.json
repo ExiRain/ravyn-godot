@@ -1,0 +1,27 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "ravyn-lynx.moc3",
+		"Textures": [
+			"ravyn-lynx.4096/texture_00.png",
+			"ravyn-lynx.4096/texture_01.png"
+		],
+		"Physics": "ravyn-lynx.physics3.json",
+		"DisplayInfo": "ravyn-lynx.cdi3.json"
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": [
+				"ParamEyeLOpen",
+				"ParamEyeROpen"
+			]
+		},
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		}
+	]
+}

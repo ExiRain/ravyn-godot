@@ -1,0 +1,100 @@
+[gd_scene format=3 uid="uid://bw7yyox0cf4da"]
+
+[ext_resource type="Script" uid="uid://bp1bwkuyerdjc" path="res://scripts/breathing.gd" id="2_0e48y"]
+
+[node name="Main Node" type="Node2D" unique_id=1103141909]
+script = ExtResource("2_0e48y")
+
+[node name="Node" type="Node" parent="." unique_id=873745832]
+
+[node name="VoicePlayer" type="AudioStreamPlayer" parent="Node" unique_id=35812074]
+
+[node name="Camera2D" type="Camera2D" parent="." unique_id=167350497]
+position = Vector2(0, -1900)
+zoom = Vector2(0.145, 0.145)
+limit_enabled = false
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=250650379]
+
+[node name="GDCubismUserModel" type="GDCubismUserModel" parent="Sprite2D" unique_id=1024284814]
+assets = "res://live2d/ravyn-lynx/ravyn-lynx.model3.json"
+load_motions = false
+parameter_mode = 1
+anim_loop = true
+anim_loop_fade_in = true
+anim_expression = ""
+anim_motion = ""
+Param7 = 0.0
+Param8 = 0.0
+Param9 = 0.0
+Param10 = -3.0543325
+Param11 = 1.1920929e-05
+Param13 = 0.0
+Param14 = 0.0
+Param15 = 0.0
+Param16 = -0.052360058
+Param17 = 4.7683716e-07
+Param = -0.002622372
+Param2 = -0.0070045963
+Param3 = -0.023259431
+Param6 = -0.0033468248
+Param4 = -0.009001749
+Param5 = -0.02942622
+ParamEyeLOpen = 1.0
+ParamEyeLSmile = 0.0
+ParamEyeROpen = 1.0
+ParamEyeRSmile = 0.0
+ParamEyeBallX = 0.0
+ParamEyeBallY = 0.0
+ParamBrowLY = 0.0
+ParamBrowLForm = 0.0
+ParamBrowRY = 0.0
+ParamBrowRForm = 0.0
+ParamBrowLX = 0.0
+ParamBrowRX = 0.0
+ParamBrowLAngle = 0.0
+ParamBrowRAngle = 0.0
+ParamMouthForm = 0.0
+ParamMouthOpenY = 0.0
+Param12 = 0.0
+Param19 = 0.0
+Param20 = 0.0
+Param21 = 0.0
+Param18 = 0.0
+Param22 = 0.0
+Param23 = 0.0
+Param24 = 0.0
+Param25 = 0.0
+ParamAngleX = 0.0
+ParamAngleY = 0.0
+ParamAngleZ = 0.0
+ParamCheek = 0.0
+ParamBodyAngleX = 0.0
+ParamBodyAngleY = 0.0
+ParamBodyAngleZ = 0.0
+ParamBreath = 0.0
+ParamHairFront = 0.0
+ParamHairSide = 0.0
+ParamHairBack = 0.0
+Part11 = 1.0
+Hairs = 1.0
+Face = 1.0
+Neck = 1.0
+Body = 1.0
+Face3 = 1.0
+Part = 1.0
+Part2 = 1.0
+Part6 = 1.0
+Part4 = 1.0
+Nose = 1.0
+Mouth = 1.0
+Pupil5 = 1.0
+Part8 = 1.0
+Iris5 = 1.0
+Pupil3 = 1.0
+Iris3 = 1.0
+Part5 = 1.0
+Pupil = 1.0
+Iris = 1.0
+
+[node name="GDCubismEffectEyeBlink" type="GDCubismEffectEyeBlink" parent="Sprite2D/GDCubismUserModel" unique_id=1615639384]

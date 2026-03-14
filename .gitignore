@@ -1,0 +1,17 @@
+.godot/
+.import/
+export_presets.cfg
+
+# Mono / C#
+.mono/
+
+# Build outputs
+bin/
+obj/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor temp files
+*.tmp
