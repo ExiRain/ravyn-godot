@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://bw7yyox0cf4da"]
 
 [ext_resource type="Script" uid="uid://bp1bwkuyerdjc" path="res://scripts/breathing.gd" id="2_0e48y"]
+[ext_resource type="Script" uid="uid://oua088db0rky" path="res://scripts/ears.gd" id="2_epypp"]
 
 [node name="Main Node" type="Node2D" unique_id=1103141909]
 script = ExtResource("2_0e48y")
@@ -27,19 +28,19 @@ anim_motion = ""
 Param7 = 0.0
 Param8 = 0.0
 Param9 = 0.0
-Param10 = -3.0543327
-Param11 = 2.3841858e-05
+Param10 = -3.054333
+Param11 = 1.08324275e-05
 Param13 = 0.0
 Param14 = 0.0
 Param15 = 0.0
 Param16 = -0.052360058
 Param17 = 4.7683716e-07
-Param = 0.017408697
-Param2 = 0.014231501
-Param3 = -0.3076838
-Param6 = 0.01786029
-Param4 = 0.0056788307
-Param5 = -0.40033847
+Param = -2.3841858e-05
+Param2 = 2.9802322e-05
+Param3 = 1.4305115e-05
+Param6 = -5.364418e-05
+Param4 = 5.9604645e-05
+Param5 = 4.2915344e-05
 ParamEyeLOpen = 1.0
 ParamEyeLSmile = 0.0
 ParamEyeROpen = 1.0
@@ -64,8 +65,10 @@ Param18 = 0.0
 Param22 = 0.0
 Param23 = 0.0
 Param24 = 0.0
-Param25 = 0.0
 ParamAngleX = 0.0
+EyeTransitiom = 0.0
+EarJigL = 0.0
+EarJigR = 0.0
 ParamAngleY = 0.0
 ParamAngleZ = 0.0
 ParamCheek = 0.0
@@ -97,4 +100,7 @@ Part5 = 1.0
 Pupil = 1.0
 Iris = 1.0
 
-[node name="GDCubismEffectEyeBlink" type="GDCubismEffectEyeBlink" parent="Sprite2D/GDCubismUserModel" unique_id=1615639384]
+[node name="Blinks" type="GDCubismEffectEyeBlink" parent="Sprite2D/GDCubismUserModel" unique_id=1615639384]
+
+[node name="Ears" type="GDCubismEffectCustom" parent="Sprite2D/GDCubismUserModel" unique_id=970237905]
+script = ExtResource("2_epypp")

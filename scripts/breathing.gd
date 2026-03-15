@@ -9,6 +9,8 @@ const SCRIPT_VERSION = 1.2
 
 @onready var model: GDCubismUserModel = $Sprite2D/GDCubismUserModel
 @onready var player: AudioStreamPlayer = $Node/VoicePlayer
+@onready var ears_node = $Sprite2D/GDCubismUserModel/Ears
+
 
 var model_ready := false
 
@@ -26,11 +28,21 @@ var headZ_param
 var part8
 var mouth_open
 var mouth_form
+var eye_transition
 var mouth_target_open := 0.0
 var mouth_target_form  := 0.0
 var mouth_queue: Array = []
 var mouth_interval     := 0.1
 var audio_duration     := 0.0
+var looking_at_user := false
+var attention_elapsed := 0.0
+var attention_duration := 0.9  # how long to transition to user look
+var attention_start_eye := Vector2.ZERO
+var attention_start_head := Vector3.ZERO
+
+# target when looking at user - slightly up, centered
+const USER_LOOK_EYE  = Vector2(0.0, 1)   # slightly up
+const USER_LOOK_HEAD = Vector3(0.0, 10, 0.0)  # face slightly up, centered
 
 
 # =========================================================
@@ -59,12 +71,12 @@ var breath_speed := 1.1
 
 var LOOK_PRESETS = [
 	{ "eye": Vector2(0,0),  "head": Vector3(0,0,0)  },
-	{ "eye": Vector2(1,0),  "head": Vector3(6,0,0)  },
-	{ "eye": Vector2(-1,0), "head": Vector3(-6,0,0) },
-	{ "eye": Vector2(0,1),  "head": Vector3(0,6,0)  },
-	{ "eye": Vector2(0,-1), "head": Vector3(0,-6,0) },
-	{ "eye": Vector2(1,1),  "head": Vector3(5,4,0)  },
-	{ "eye": Vector2(-1,1), "head": Vector3(-5,4,0) },
+	{ "eye": Vector2(0.9,0),  "head": Vector3(8,0,0)  },
+	{ "eye": Vector2(-0.9,0), "head": Vector3(-8,0,0) },
+	{ "eye": Vector2(0,0.9),  "head": Vector3(0,8,0)  },
+	{ "eye": Vector2(0,-0.9), "head": Vector3(0,-8,0) },
+	{ "eye": Vector2(0.9,0.9),  "head": Vector3(8,6,0)  },
+	{ "eye": Vector2(-0.9,0.9), "head": Vector3(-8,6,0) },
 	{ "eye": Vector2(0,0),  "head": Vector3(0,0,8)  },
 	{ "eye": Vector2(0,0),  "head": Vector3(0,0,-8) }
 ]
@@ -132,6 +144,7 @@ func _wait_for_model():
 			"ParamAngleX":     headX_param  = p
 			"ParamAngleY":     headY_param  = p
 			"ParamAngleZ":     headZ_param  = p
+			"EyeTransitiom":   eye_transition = p
 
 	for part in model.get_part_opacities():
 		if part.id == "Part8":
@@ -155,7 +168,10 @@ func _process(delta):
 
 	_handle_websocket()
 	breathe(delta)
-	idleLook(delta)
+	if looking_at_user:
+		_update_attention(delta)
+	else:
+		idleLook(delta) 
 	eyeColorChange(delta)
 	_update_lipsync()
 	model.advance(delta)
@@ -180,16 +196,27 @@ func _handle_websocket():
 			var msg = pkt.get_string_from_utf8()
 
 			if msg == "START":
-				talking          = true
+				talking         = true
+				ears_node.perk_up()
+				looking_at_user = true
+				attention_elapsed = 0.0
+				attention_start_eye  = Vector2(eyeX_param.value, eyeY_param.value)
+				attention_start_head = Vector3(headX_param.value, headY_param.value, headZ_param.value)
+				# pause idle look while talking
+				looking = false
 				mouth_queue.clear()
 				phoneme_timeline.clear()
-				audio_buffer     = PackedByteArray()
-				receiving_audio  = true
-				first_chunk      = true
+				audio_buffer    = PackedByteArray()
+				receiving_audio = true
+				first_chunk     = true
 
 			elif msg == "END":
 				talking         = false
 				receiving_audio = false
+				looking_at_user = false
+				# resume idle look after short delay
+				look_timer     = 0.0
+				next_look_time = randf_range(3.5, 10.0)  # short wait then wander again
 				_prepare_audio()
 
 			elif msg.begins_with("PHONEME:"):
@@ -366,6 +393,30 @@ func _map_phoneme_to_viseme(p: String) -> Dictionary:
 
 
 # =========================================================
+# ATTENTION_LOOK
+# =========================================================
+
+func _update_attention(delta):
+	if not looking_at_user:
+		return
+	
+	# only trigger once, not every frame
+	if attention_elapsed > 0.0:
+		return
+	attention_elapsed = 1.0  # mark as triggered
+	
+	var tween = create_tween()
+	tween.set_parallel(true)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	
+	if eyeX_param:  tween.tween_property(eyeX_param,  "value", 0.0, 1.0)
+	if eyeY_param:  tween.tween_property(eyeY_param,  "value", 1.0, 1.0)
+	if headX_param: tween.tween_property(headX_param, "value", 0.0, 1.0)
+	if headY_param: tween.tween_property(headY_param, "value", 10.0, 1.0)
+	if headZ_param: tween.tween_property(headZ_param, "value", 0.0, 1.0)
+
+# =========================================================
 # BREATH
 # =========================================================
 
@@ -441,6 +492,8 @@ func eyeColorChange(delta):
 		t = t * t * (3.0 - 2.0 * t)
 		eye_color_current = lerp(eye_color_current, eye_color_target, t)
 		part8.value       = eye_color_current
+		if eye_transition:
+			eye_transition.value = part8.value * 30.0
 		if t >= 1.0:
 			eye_color_active = false
 			_schedule_eye_color()

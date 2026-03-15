@@ -2,7 +2,7 @@
 	"Version": 3,
 	"Meta": {
 		"PhysicsSettingCount": 10,
-		"TotalInputCount": 42,
+		"TotalInputCount": 46,
 		"TotalOutputCount": 24,
 		"VertexCount": 40,
 		"Fps": 60,
@@ -853,7 +853,7 @@
 						"Target": "Parameter",
 						"Id": "ParamAngleX"
 					},
-					"Weight": 51,
+					"Weight": 41,
 					"Type": "X",
 					"Reflect": false
 				},
@@ -862,7 +862,7 @@
 						"Target": "Parameter",
 						"Id": "ParamAngleY"
 					},
-					"Weight": 23,
+					"Weight": 10,
 					"Type": "X",
 					"Reflect": false
 				},
@@ -873,6 +873,15 @@
 					},
 					"Weight": 53,
 					"Type": "Angle",
+					"Reflect": false
+				},
+				{
+					"Source": {
+						"Target": "Parameter",
+						"Id": "EarJigL"
+					},
+					"Weight": 49,
+					"Type": "X",
 					"Reflect": false
 				}
 			],
@@ -1001,7 +1010,7 @@
 						"Target": "Parameter",
 						"Id": "ParamAngleX"
 					},
-					"Weight": 51,
+					"Weight": 38,
 					"Type": "X",
 					"Reflect": false
 				},
@@ -1010,7 +1019,7 @@
 						"Target": "Parameter",
 						"Id": "ParamAngleY"
 					},
-					"Weight": 23,
+					"Weight": 12,
 					"Type": "X",
 					"Reflect": false
 				},
@@ -1021,6 +1030,15 @@
 					},
 					"Weight": 53,
 					"Type": "Angle",
+					"Reflect": false
+				},
+				{
+					"Source": {
+						"Target": "Parameter",
+						"Id": "EarJigR"
+					},
+					"Weight": 50,
+					"Type": "X",
 					"Reflect": false
 				}
 			],
@@ -1143,6 +1161,15 @@
 					"Weight": 53,
 					"Type": "Angle",
 					"Reflect": false
+				},
+				{
+					"Source": {
+						"Target": "Parameter",
+						"Id": "EarJigL"
+					},
+					"Weight": 67,
+					"Type": "X",
+					"Reflect": false
 				}
 			],
 			"Output": [
@@ -1241,6 +1268,15 @@
 					},
 					"Weight": 53,
 					"Type": "Angle",
+					"Reflect": false
+				},
+				{
+					"Source": {
+						"Target": "Parameter",
+						"Id": "EarJigR"
+					},
+					"Weight": 67,
+					"Type": "X",
 					"Reflect": false
 				}
 			],

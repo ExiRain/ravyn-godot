@@ -202,14 +202,24 @@
 			"Name": "ear r 3"
 		},
 		{
-			"Id": "Param25",
-			"GroupId": "ParamGroup4",
-			"Name": "Eye Transition"
-		},
-		{
 			"Id": "ParamAngleX",
 			"GroupId": "",
 			"Name": "Angle X"
+		},
+		{
+			"Id": "EyeTransitiom",
+			"GroupId": "",
+			"Name": "Eye Transition"
+		},
+		{
+			"Id": "EarJigL",
+			"GroupId": "",
+			"Name": "EarJig L"
+		},
+		{
+			"Id": "EarJigR",
+			"GroupId": "",
+			"Name": "EarJig R"
 		},
 		{
 			"Id": "ParamAngleY",
