@@ -210,6 +210,7 @@ func _handle_websocket():
 			if msg == "START":
 				talking = true
 				mouth_queue.clear()
+				phoneme_timeline.clear()
 				mouth_msg_index = 0
 				audio_buffer = PackedByteArray()
 				receiving_audio = true
@@ -218,6 +219,10 @@ func _handle_websocket():
 				talking = false
 				receiving_audio = false
 				_prepare_audio()
+				
+			elif msg.begins_with("PHONEME:"):
+				var parts = msg.split(":")
+				phoneme_timeline.append({ "p": parts[1], "t": float(parts[2]) })
 
 			elif msg.begins_with("MOUTH:"):
 				var raw = float(msg.split(":")[1])
@@ -334,8 +339,9 @@ func _update_lipsync():
 	else:
 		target_form = 0.8
 
+	mouth_open.value = lerp(mouth_open.value, amp, 0.5)         # was 0.4
 	if mouth_form:
-		mouth_form.value = lerp(mouth_form.value, target_form, 0.3)
+		mouth_form.value = lerp(mouth_form.value, target_form, 0.5)  # was 0.3
 
 func _current_viseme(playback_time: float) -> Dictionary:
 
@@ -354,37 +360,34 @@ func _current_viseme(playback_time: float) -> Dictionary:
 
 
 func _map_phoneme_to_viseme(p: String) -> Dictionary:
-
 	var s = p.to_lower()
 
-	# =========================
-	# WIDE VOWELS (A)
-	# =========================
+	# WIDE VOWELS (A) - jaw drops fully, neutral lips
 	if s in ["a","ɑ","æ","ɐ"]:
 		return { "open": 1.0, "form": 0.0 }
 
-	# =========================
-	# ROUND VOWELS (O / U)
-	# =========================
+	# ROUND VOWELS (O / U) - O pucker, less open
 	if s in ["o","ɔ","oʊ","ʊ","u"]:
-		return { "open": 0.7, "form": -0.35 }
+		return { "open": 0.5, "form": -0.35 }
 
-	# =========================
-	# FRONT VOWELS (I / E)
-	# =========================
+	# FRONT VOWELS (I / E) - smile shape, half open
 	if s in ["i","ɪ","e","ɛ","eɪ"]:
-		return { "open": 0.55, "form": 1.0 }
+		return { "open": 0.6, "form": 1.0 }
 
-	# =========================
-	# CLOSED CONSONANTS
-	# =========================
+	# CLOSED CONSONANTS - lips press shut
 	if s in ["m","b","p"]:
-		return { "open": 0.05, "form": 0.0 }
+		return { "open": 0.0, "form": 0.0 }
 
-	# =========================
-	# SOFT SPEECH DEFAULT
-	# =========================
-	return { "open": 0.4, "form": 0.0 }
+	# FRICATIVES - slight teeth show, smile-ish
+	if s in ["f","v","θ","ð"]:
+		return { "open": 0.25, "form": 0.5 }
+
+	# SIBILANTS S/Z - narrow smile
+	if s in ["s","z","ʃ","ʒ"]:
+		return { "open": 0.3, "form": 0.7 }
+
+	# DEFAULT consonants - small open neutral
+	return { "open": 0.35, "form": 0.0 }
 
 
 # =========================================================
