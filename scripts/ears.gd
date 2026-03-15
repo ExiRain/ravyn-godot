@@ -24,8 +24,8 @@ var perk_elapsed := 0.0
 
 const JIGGLE_DURATION := 0.4
 const JIGGLE_AMOUNT   := 25.0
-const MIN_PAUSE       := 8.0
-const MAX_PAUSE       := 20.0
+const MIN_PAUSE       := 15.0
+const MAX_PAUSE       := 35.0
 const PERK_DURATION   := 1.0
 const PERK_VALUE      := -30.0
 

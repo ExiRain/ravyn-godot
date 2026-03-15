@@ -1,117 +1,47 @@
 extends Node2D
 
-const SCRIPT_VERSION = 1.2
-
+const SCRIPT_VERSION = 1.3
 
 # =========================================================
 # MODEL
 # =========================================================
 
-@onready var model: GDCubismUserModel = $Sprite2D/GDCubismUserModel
-@onready var player: AudioStreamPlayer = $Node/VoicePlayer
-@onready var ears_node = $Sprite2D/GDCubismUserModel/Ears
-
+@onready var model          : GDCubismUserModel = $Sprite2D/GDCubismUserModel
+@onready var player         : AudioStreamPlayer = $Node/VoicePlayer
+@onready var ears_node                          = $Sprite2D/GDCubismUserModel/Ears
+@onready var eyes_node                          = $Sprite2D/GDCubismUserModel/Eyes
+@onready var idle_look_node                     = $Sprite2D/GDCubismUserModel/IdleLook
 
 var model_ready := false
 
-
 # =========================================================
-# PARAMETERS
+# PARAMETERS - only what main script owns
 # =========================================================
 
 var breath_param
-var eyeX_param
-var eyeY_param
-var headX_param
-var headY_param
-var headZ_param
-var part8
 var mouth_open
 var mouth_form
-var eye_transition
-var mouth_target_open := 0.0
-var mouth_target_form  := 0.0
-var mouth_queue: Array = []
-var mouth_interval     := 0.1
-var audio_duration     := 0.0
-var looking_at_user := false
-var attention_elapsed := 0.0
-var attention_duration := 0.9  # how long to transition to user look
-var attention_start_eye := Vector2.ZERO
-var attention_start_head := Vector3.ZERO
-
-# target when looking at user - slightly up, centered
-const USER_LOOK_EYE  = Vector2(0.0, 1)   # slightly up
-const USER_LOOK_HEAD = Vector3(0.0, 10, 0.0)  # face slightly up, centered
-
 
 # =========================================================
 # AUDIO / WEBSOCKET / PHONEMES
 # =========================================================
 
-var socket         := WebSocketPeer.new()
-var audio_buffer   := PackedByteArray()
+var socket          := WebSocketPeer.new()
+var audio_buffer    := PackedByteArray()
 var receiving_audio := false
 var talking         := false
-var first_chunk     := true       # tracks whether WAV header has been received
+var first_chunk     := true
 var phoneme_timeline: Array = []
-
+var mouth_queue     : Array = []
+var mouth_interval  := 0.1
+var audio_duration  := 0.0
 
 # =========================================================
-# BREATH SETTINGS
+# BREATH
 # =========================================================
 
 var breath_time  := 0.0
 var breath_speed := 1.1
-
-
-# =========================================================
-# LOOK PRESETS
-# =========================================================
-
-var LOOK_PRESETS = [
-	{ "eye": Vector2(0,0),  "head": Vector3(0,0,0)  },
-	{ "eye": Vector2(0.9,0),  "head": Vector3(8,0,0)  },
-	{ "eye": Vector2(-0.9,0), "head": Vector3(-8,0,0) },
-	{ "eye": Vector2(0,0.9),  "head": Vector3(0,8,0)  },
-	{ "eye": Vector2(0,-0.9), "head": Vector3(0,-8,0) },
-	{ "eye": Vector2(0.9,0.9),  "head": Vector3(8,6,0)  },
-	{ "eye": Vector2(-0.9,0.9), "head": Vector3(-8,6,0) },
-	{ "eye": Vector2(0,0),  "head": Vector3(0,0,8)  },
-	{ "eye": Vector2(0,0),  "head": Vector3(0,0,-8) }
-]
-
-
-# =========================================================
-# LOOK SYSTEM
-# =========================================================
-
-var look_timer     := 0.0
-var next_look_time := 0.0
-var looking        := false
-var look_elapsed   := 0.0
-var look_duration  := 2.5
-var eye_start      := Vector2.ZERO
-var eye_target     := Vector2.ZERO
-var head_start     := Vector3.ZERO
-var head_target    := Vector3.ZERO
-
-
-# =========================================================
-# EYE COLOR SWITCH
-# =========================================================
-
-var eye_color_current    := 0.0
-var eye_color_target     := 0.0
-var eye_color_timer      := 0.0
-var next_eye_color_time  := 0.0
-var eye_color_transition := 0.0
-var eye_color_duration   := 4.0
-var eye_color_active     := false
-var toRed_min  := 5.0
-var toRed_max  := 10.0
-var toBlue_min := 5.0
-var toBlue_max := 10.0
 
 
 # =========================================================
@@ -139,22 +69,7 @@ func _wait_for_model():
 			"ParamBreath":     breath_param = p
 			"ParamMouthOpenY": mouth_open   = p
 			"ParamMouthForm":  mouth_form   = p
-			"ParamEyeBallX":   eyeX_param   = p
-			"ParamEyeBallY":   eyeY_param   = p
-			"ParamAngleX":     headX_param  = p
-			"ParamAngleY":     headY_param  = p
-			"ParamAngleZ":     headZ_param  = p
-			"EyeTransitiom":   eye_transition = p
 
-	for part in model.get_part_opacities():
-		if part.id == "Part8":
-			part8 = part
-
-	if part8:
-		part8.value = 0.0
-
-	_schedule_next_look()
-	_schedule_eye_color()
 	model_ready = true
 
 
@@ -168,11 +83,6 @@ func _process(delta):
 
 	_handle_websocket()
 	breathe(delta)
-	if looking_at_user:
-		_update_attention(delta)
-	else:
-		idleLook(delta) 
-	eyeColorChange(delta)
 	_update_lipsync()
 	model.advance(delta)
 
@@ -197,27 +107,29 @@ func _handle_websocket():
 
 			if msg == "START":
 				talking         = true
-				ears_node.perk_up()
-				looking_at_user = true
-				attention_elapsed = 0.0
-				attention_start_eye  = Vector2(eyeX_param.value, eyeY_param.value)
-				attention_start_head = Vector3(headX_param.value, headY_param.value, headZ_param.value)
-				# pause idle look while talking
-				looking = false
+				first_chunk     = true
+				receiving_audio = true
+				audio_buffer    = PackedByteArray()
 				mouth_queue.clear()
 				phoneme_timeline.clear()
-				audio_buffer    = PackedByteArray()
-				receiving_audio = true
-				first_chunk     = true
+				ears_node.perk_up()
+				idle_look_node.start_talking()
 
 			elif msg == "END":
 				talking         = false
 				receiving_audio = false
-				looking_at_user = false
-				# resume idle look after short delay
-				look_timer     = 0.0
-				next_look_time = randf_range(3.5, 10.0)  # short wait then wander again
+				idle_look_node.stop_talking()
 				_prepare_audio()
+
+			elif msg.begins_with("MOOD:"):
+				var value = float(msg.split(":")[1])
+				eyes_node.set_mood(float(msg.split(":")[1]))
+				idle_look_node.set_mood(value)
+
+			elif msg.begins_with("TIRED:"):
+				var value = float(msg.split(":")[1])
+				eyes_node.set_tired(float(msg.split(":")[1]))
+				idle_look_node.set_tired(value)
 
 			elif msg.begins_with("PHONEME:"):
 				var parts = msg.split(":")
@@ -243,8 +155,8 @@ func _handle_websocket():
 						})
 
 			elif msg.begins_with("MOUTH:"):
-				var raw  = float(msg.split(":")[1])
-				var amp  = clamp(raw * 8.0, 0.0, 1.0)
+				var raw         = float(msg.split(":")[1])
+				var amp         = clamp(raw * 8.0, 0.0, 1.0)
 				var open: float = amp
 				var form: float = 0.0
 				if amp < 0.1:
@@ -274,13 +186,12 @@ func _prepare_audio():
 	if audio_buffer.size() < 44:
 		return
 
-	var pcm = audio_buffer.slice(44, audio_buffer.size())
-
-	var stream         := AudioStreamWAV.new()
-	stream.data        = pcm
-	stream.format      = AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate    = 24000
-	stream.stereo      = false
+	var pcm        = audio_buffer.slice(44, audio_buffer.size())
+	var stream     := AudioStreamWAV.new()
+	stream.data    = pcm
+	stream.format  = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = 24000
+	stream.stereo  = false
 
 	audio_duration = float(pcm.size()) / float(24000 * 2)
 
@@ -288,8 +199,6 @@ func _prepare_audio():
 		mouth_interval = audio_duration / float(mouth_queue.size() - 1)
 	else:
 		mouth_interval = 0.1
-
-	print("Audio duration: ", audio_duration, "s  |  Mouth msgs: ", mouth_queue.size(), "  |  Interval: ", mouth_interval, "s")
 
 	player.stream = stream
 	player.play()
@@ -309,9 +218,9 @@ func _update_lipsync():
 			mouth_form.value = lerp(mouth_form.value, 0.0, 0.1)
 		return
 
-	var amp := 0.0
-	var playback_pos = player.get_playback_position()
-	var stream = player.stream as AudioStreamWAV
+	var amp          := 0.0
+	var playback_pos  = player.get_playback_position()
+	var stream        = player.stream as AudioStreamWAV
 
 	if stream and stream.data.size() > 0:
 		var sample_idx = int(playback_pos * 24000)
@@ -344,7 +253,7 @@ func _update_lipsync():
 
 
 # =========================================================
-# VISEME LOOKUP
+# VISEME
 # =========================================================
 
 func _current_viseme(playback_time: float) -> Dictionary:
@@ -364,57 +273,21 @@ func _current_viseme(playback_time: float) -> Dictionary:
 func _map_phoneme_to_viseme(p: String) -> Dictionary:
 	var s = p.to_lower()
 
-	# WIDE VOWELS (A)
 	if s in ["a","ɑ","æ","ɐ","ɑː"]:
 		return { "open": 1.0, "form": 0.0 }
-
-	# ROUND VOWELS (O / U)
 	if s in ["o","ɔ","oʊ","ʊ","u","uː","ɔː"]:
 		return { "open": 0.5, "form": -0.25 }
-
-	# FRONT VOWELS (I / E) - toned down smile
 	if s in ["i","ɪ","e","ɛ","eɪ","aɪ","iː"]:
 		return { "open": 0.6, "form": 0.6 }
-
-	# CLOSED CONSONANTS
 	if s in ["m","b","p"]:
 		return { "open": 0.0, "form": 0.0 }
-
-	# FRICATIVES
 	if s in ["f","v","θ","ð"]:
 		return { "open": 0.25, "form": 0.3 }
-
-	# SIBILANTS
 	if s in ["s","z","ʃ","ʒ"]:
 		return { "open": 0.3, "form": 0.4 }
 
-	# DEFAULT - neutral rest
 	return { "open": 0.35, "form": 0.0 }
 
-
-# =========================================================
-# ATTENTION_LOOK
-# =========================================================
-
-func _update_attention(delta):
-	if not looking_at_user:
-		return
-	
-	# only trigger once, not every frame
-	if attention_elapsed > 0.0:
-		return
-	attention_elapsed = 1.0  # mark as triggered
-	
-	var tween = create_tween()
-	tween.set_parallel(true)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	
-	if eyeX_param:  tween.tween_property(eyeX_param,  "value", 0.0, 1.0)
-	if eyeY_param:  tween.tween_property(eyeY_param,  "value", 1.0, 1.0)
-	if headX_param: tween.tween_property(headX_param, "value", 0.0, 1.0)
-	if headY_param: tween.tween_property(headY_param, "value", 10.0, 1.0)
-	if headZ_param: tween.tween_property(headZ_param, "value", 0.0, 1.0)
 
 # =========================================================
 # BREATH
@@ -423,84 +296,5 @@ func _update_attention(delta):
 func breathe(delta):
 	if not breath_param:
 		return
-	breath_time        += delta * breath_speed
-	breath_param.value  = (cos(breath_time) * -0.5) + 0.5
-
-
-# =========================================================
-# IDLE LOOK SYSTEM
-# =========================================================
-
-func idleLook(delta):
-	if not looking:
-		look_timer += delta
-		if look_timer >= next_look_time:
-			look_timer = 0.0
-			startLook()
-	else:
-		look_elapsed += delta
-		var t = clamp(look_elapsed / look_duration, 0, 1)
-		t = t * t * (3.0 - 2.0 * t)
-
-		if eyeX_param:  eyeX_param.value  = lerp(eye_start.x,   eye_target.x,   t)
-		if eyeY_param:  eyeY_param.value  = lerp(eye_start.y,   eye_target.y,   t)
-		if headX_param: headX_param.value = lerp(head_start.x,  head_target.x,  t)
-		if headY_param: headY_param.value = lerp(head_start.y,  head_target.y,  t)
-		if headZ_param: headZ_param.value = lerp(head_start.z,  head_target.z,  t)
-
-		if t >= 1.0:
-			looking = false
-			_schedule_next_look()
-
-
-func startLook():
-	looking      = true
-	look_elapsed = 0.0
-	look_duration = randf_range(1.5, 3.5)
-
-	var preset = LOOK_PRESETS.pick_random()
-
-	eye_start  = Vector2(eyeX_param.value,  eyeY_param.value)
-	head_start = Vector3(headX_param.value, headY_param.value, headZ_param.value)
-
-	eye_target  = preset["eye"]
-	head_target = preset["head"]
-
-
-func _schedule_next_look():
-	next_look_time = randf_range(5.0, 30.0)
-
-
-# =========================================================
-# EYE COLOR SWITCH
-# =========================================================
-
-func eyeColorChange(delta):
-	if not part8:
-		return
-
-	if not eye_color_active:
-		eye_color_timer += delta
-		if eye_color_timer >= next_eye_color_time:
-			eye_color_timer      = 0.0
-			eye_color_target     = 1.0 - eye_color_target
-			eye_color_transition = 0.0
-			eye_color_active     = true
-	else:
-		eye_color_transition += delta
-		var t = clamp(eye_color_transition / eye_color_duration, 0.0, 1.0)
-		t = t * t * (3.0 - 2.0 * t)
-		eye_color_current = lerp(eye_color_current, eye_color_target, t)
-		part8.value       = eye_color_current
-		if eye_transition:
-			eye_transition.value = part8.value * 30.0
-		if t >= 1.0:
-			eye_color_active = false
-			_schedule_eye_color()
-
-
-func _schedule_eye_color():
-	if eye_color_target < 0.5:
-		next_eye_color_time = randf_range(toRed_min, toRed_max)
-	else:
-		next_eye_color_time = randf_range(toBlue_min, toBlue_max)
+	breath_time       += delta * breath_speed
+	breath_param.value = (cos(breath_time) * -0.5) + 0.5

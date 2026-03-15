@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" uid="uid://bp1bwkuyerdjc" path="res://scripts/breathing.gd" id="2_0e48y"]
 [ext_resource type="Script" uid="uid://oua088db0rky" path="res://scripts/ears.gd" id="2_epypp"]
+[ext_resource type="Script" uid="uid://dyy42abedyb76" path="res://scripts/eyes.gd" id="3_epypp"]
+[ext_resource type="Script" uid="uid://bg3c1be5d3vc3" path="res://scripts/idle_look.gd" id="4_0hol4"]
 
 [node name="Main Node" type="Node2D" unique_id=1103141909]
 script = ExtResource("2_0e48y")
@@ -35,12 +37,12 @@ Param14 = 0.0
 Param15 = 0.0
 Param16 = -0.052360058
 Param17 = 4.7683716e-07
-Param = -12.124222
-Param2 = -6.852236
-Param3 = 20.4817
-Param6 = -15.666871
-Param4 = -9.592537
-Param5 = 26.263805
+Param = 2.3841858e-05
+Param2 = -2.9802322e-05
+Param3 = -2.1457672e-05
+Param6 = 2.3841858e-05
+Param4 = -2.9802322e-05
+Param5 = -2.1457672e-05
 ParamEyeLOpen = 1.0
 ParamEyeLSmile = 0.0
 ParamEyeROpen = 1.0
@@ -66,7 +68,7 @@ Param22 = 0.0
 Param23 = 0.0
 Param24 = 0.0
 ParamAngleX = 0.0
-EyeTransitiom = 0.0
+EyeTransition = 0.0
 EarJigL = 0.0
 EarJigR = 0.0
 ParamAngleY = 0.0
@@ -100,7 +102,11 @@ Part5 = 1.0
 Pupil = 1.0
 Iris = 1.0
 
-[node name="Blinks" type="GDCubismEffectEyeBlink" parent="Sprite2D/GDCubismUserModel" unique_id=1615639384]
-
 [node name="Ears" type="GDCubismEffectCustom" parent="Sprite2D/GDCubismUserModel" unique_id=970237905]
 script = ExtResource("2_epypp")
+
+[node name="Eyes" type="GDCubismEffectCustom" parent="Sprite2D/GDCubismUserModel" unique_id=2108579979]
+script = ExtResource("3_epypp")
+
+[node name="IdleLook" type="GDCubismEffectCustom" parent="Sprite2D/GDCubismUserModel" unique_id=1275790879]
+script = ExtResource("4_0hol4")
