@@ -10,6 +10,8 @@ extends GDCubismEffectCustom
 var eye_l_open
 var eye_r_open
 
+var idle_node = null
+
 # brow params
 var brow_l_y
 var brow_r_y
@@ -201,7 +203,12 @@ func _update_blink(delta: float):
 
 		if blink_elapsed >= total:
 			blinking = false
-			_schedule_blink()
+			if randf() < 0.2:
+				# double blink - very short pause then blink again
+				blink_next  = randf_range(0.1, 0.3)
+				blink_timer = 0.0
+			else:
+				_schedule_blink()
 
 	else:
 		blink_timer += delta
@@ -221,14 +228,17 @@ func _schedule_blink():
 
 func _smooth_apply(delta: float):
 	var speed    := 8.0 * delta
-	cur_brow_l_y  = lerp(cur_brow_l_y, target_brow_l_y, speed)
-	cur_brow_r_y  = lerp(cur_brow_r_y, target_brow_r_y, speed)
-	cur_brow_l_f  = lerp(cur_brow_l_f, target_brow_l_f, speed)
-	cur_brow_r_f  = lerp(cur_brow_r_f, target_brow_r_f, speed)
-	if brow_l_y:    brow_l_y.value    = cur_brow_l_y
-	if brow_r_y:    brow_r_y.value    = cur_brow_r_y
-	if brow_l_form: brow_l_form.value = cur_brow_l_f
-	if brow_r_form: brow_r_form.value = cur_brow_r_f
+	
+	# skip brows if idle is doing asymmetric animation
+	if not (idle_node and idle_node.brow_asym_active):
+		cur_brow_l_y  = lerp(cur_brow_l_y, target_brow_l_y, speed)
+		cur_brow_r_y  = lerp(cur_brow_r_y, target_brow_r_y, speed)
+		cur_brow_l_f  = lerp(cur_brow_l_f, target_brow_l_f, speed)
+		cur_brow_r_f  = lerp(cur_brow_r_f, target_brow_r_f, speed)
+		if brow_l_y:    brow_l_y.value    = cur_brow_l_y
+		if brow_r_y:    brow_r_y.value    = cur_brow_r_y
+		if brow_l_form: brow_l_form.value = cur_brow_l_f
+		if brow_r_form: brow_r_form.value = cur_brow_r_f
 
 
 # =========================================================

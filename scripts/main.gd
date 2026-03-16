@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 1.3
+const SCRIPT_VERSION = 1.5
 
 # =========================================================
 # MODEL
@@ -10,7 +10,7 @@ const SCRIPT_VERSION = 1.3
 @onready var player         : AudioStreamPlayer = $Node/VoicePlayer
 @onready var ears_node                          = $Sprite2D/GDCubismUserModel/Ears
 @onready var eyes_node                          = $Sprite2D/GDCubismUserModel/Eyes
-@onready var idle_look_node                     = $Sprite2D/GDCubismUserModel/IdleLook
+@onready var idle_node                     = $Sprite2D/GDCubismUserModel/Idle
 
 var model_ready := false
 
@@ -71,6 +71,10 @@ func _wait_for_model():
 			"ParamMouthForm":  mouth_form   = p
 
 	model_ready = true
+	idle_node.eyes_node        = eyes_node
+	idle_node.mouth_form_param = mouth_form
+	eyes_node.idle_node 	   = idle_node
+	print("mouth_form:", mouth_form != null)
 
 
 # =========================================================
@@ -113,23 +117,23 @@ func _handle_websocket():
 				mouth_queue.clear()
 				phoneme_timeline.clear()
 				ears_node.perk_up()
-				idle_look_node.start_talking()
+				idle_node.start_talking()
 
 			elif msg == "END":
 				talking         = false
 				receiving_audio = false
-				idle_look_node.stop_talking()
+				idle_node.stop_talking()
 				_prepare_audio()
 
 			elif msg.begins_with("MOOD:"):
 				var value = float(msg.split(":")[1])
 				eyes_node.set_mood(float(msg.split(":")[1]))
-				idle_look_node.set_mood(value)
+				idle_node.set_mood(value)
 
 			elif msg.begins_with("TIRED:"):
 				var value = float(msg.split(":")[1])
 				eyes_node.set_tired(float(msg.split(":")[1]))
-				idle_look_node.set_tired(value)
+				idle_node.set_tired(value)
 
 			elif msg.begins_with("PHONEME:"):
 				var parts = msg.split(":")
@@ -214,7 +218,7 @@ func _update_lipsync():
 
 	if not player.playing:
 		mouth_open.value = lerp(mouth_open.value, 0.0, 0.15)
-		if mouth_form:
+		if mouth_form and not idle_node.mouth_flicker_active:
 			mouth_form.value = lerp(mouth_form.value, 0.0, 0.1)
 		return
 
@@ -248,8 +252,9 @@ func _update_lipsync():
 	mouth_open.value = lerp(mouth_open.value, amp, 0.5)
 
 	if mouth_form:
-		var viseme = _current_viseme(playback_pos)
-		mouth_form.value = lerp(mouth_form.value, viseme["form"], 0.25)
+		if not idle_node.mouth_flicker_active:
+			var viseme = _current_viseme(playback_pos)
+			mouth_form.value = lerp(mouth_form.value, viseme["form"], 0.25)
 
 
 # =========================================================
