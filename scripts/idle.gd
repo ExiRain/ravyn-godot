@@ -243,22 +243,37 @@ func _evaluate_group_switch():
 # =========================================================
 # ATTENTION
 # =========================================================
-
+# The old version tweened once and stopped. This version
+# actively holds eyes/head in user focus position every frame
+# while talking, with gentle micro-drift for life.
+# =========================================================
+ 
 func _update_attention():
-	if attention_triggered:
-		return
-	attention_triggered = true
-
-	var tween = get_tree().get_root().create_tween()
-	tween.set_parallel(true)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-
-	if eyeX_param:  tween.tween_property(eyeX_param,  "value", USER_LOOK_EYE.x,  1.0)
-	if eyeY_param:  tween.tween_property(eyeY_param,  "value", USER_LOOK_EYE.y,  1.0)
-	if headX_param: tween.tween_property(headX_param, "value", USER_LOOK_HEAD.x, 1.0)
-	if headY_param: tween.tween_property(headY_param, "value", USER_LOOK_HEAD.y, 1.0)
-	if headZ_param: tween.tween_property(headZ_param, "value", USER_LOOK_HEAD.z, 1.0)
+	if not attention_triggered:
+		# first frame — fire the tween for smooth transition IN
+		attention_triggered = true
+		var tween = get_tree().get_root().create_tween()
+		tween.set_parallel(true)
+		tween.set_ease(Tween.EASE_IN_OUT)
+		tween.set_trans(Tween.TRANS_CUBIC)
+		if eyeX_param:  tween.tween_property(eyeX_param,  "value", USER_LOOK_EYE.x,  0.6)
+		if eyeY_param:  tween.tween_property(eyeY_param,  "value", USER_LOOK_EYE.y,  0.6)
+		if headX_param: tween.tween_property(headX_param, "value", USER_LOOK_HEAD.x, 0.6)
+		if headY_param: tween.tween_property(headY_param, "value", USER_LOOK_HEAD.y, 0.6)
+		if headZ_param: tween.tween_property(headZ_param, "value", USER_LOOK_HEAD.z, 0.6)
+	else:
+		# every subsequent frame — gently hold position
+		# this prevents any other system from pulling eyes away
+		if eyeX_param:
+			eyeX_param.value = lerp(eyeX_param.value, USER_LOOK_EYE.x, 0.1)
+		if eyeY_param:
+			eyeY_param.value = lerp(eyeY_param.value, USER_LOOK_EYE.y, 0.1)
+		if headX_param:
+			headX_param.value = lerp(headX_param.value, USER_LOOK_HEAD.x, 0.05)
+		if headY_param:
+			headY_param.value = lerp(headY_param.value, USER_LOOK_HEAD.y, 0.05)
+		if headZ_param:
+			headZ_param.value = lerp(headZ_param.value, USER_LOOK_HEAD.z, 0.05)
 
 
 # =========================================================

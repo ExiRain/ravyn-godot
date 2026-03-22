@@ -22,6 +22,9 @@ var brow_r_form
 var part8
 var eye_transition
 
+var talking := false
+var face_override := false   # true when FACE:SURPRISED is active
+
 # =========================================================
 # MOOD / TIRED STATE
 # =========================================================
@@ -122,7 +125,15 @@ func _on_process(model: GDCubismUserModel, delta: float):
 # =========================================================
 
 func _update_ceiling():
-	if current_expression == Expressions.SURPRISED:
+	if face_override:
+		# FACE:SURPRISED was triggered — allow 1.4 briefly
+		eye_open_limit = 1.4
+		return
+ 
+	if talking:
+		# during speech: no wide-eye, keep stable range
+		eye_open_limit = clamp(lerp(1.0, 0.85, tired), 0.85, 1.05)
+	elif current_expression == Expressions.SURPRISED:
 		eye_open_limit = 1.4
 	else:
 		eye_open_limit = lerp(1.0, 0.75, tired)
@@ -307,3 +318,17 @@ func do_wink(left: bool = true):
 	set_expression(Expressions.WINK_L if left else Expressions.WINK_R)
 	await get_tree().create_timer(0.4).timeout
 	set_expression(Expressions.NEUTRAL)
+
+func prepare_surprised():
+	"""Called for subs/follows — wide eyes + raised brows, then auto-revert."""
+	face_override = true
+	set_expression(Expressions.SURPRISED)
+	# auto-revert after 2 seconds
+	await get_tree().create_timer(2.0).timeout
+	face_override = false
+	set_expression(Expressions.NEUTRAL)
+ 
+ 
+func set_talking(value: bool):
+	talking = value
+ 

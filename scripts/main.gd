@@ -52,7 +52,7 @@ func _ready():
 	print("Ravyn avatar script version:", SCRIPT_VERSION)
 	randomize()
 	print("Connecting WebSocket")
-	socket.connect_to_url("ws://192.168.1.154:9000/ws/audio")
+	socket.connect_to_url("ws://localhost:9000/ws/audio")
 	call_deferred("_wait_for_model")
 
 
