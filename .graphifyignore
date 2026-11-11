@@ -1,0 +1,3 @@
+# Third-party: the Live2D addon and its C# examples are not Ravyn's code,
+# and they were the ONLY thing /graphify mapped here (it skips .gd files).
+addons/

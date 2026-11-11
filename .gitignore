@@ -19,3 +19,8 @@ Thumbs.db
 # Executables
 *.exe
 *.pck
+# graphify knowledge graph — rebuilt on demand, not source. graphify cannot
+# read GDScript, so the map of scripts/ and the scenes is written here by
+# ravyn-lynx-p/tools/gdscript_graph.py (and joined to the PC and notebook in
+# ravyn-lynx-p/graph/).
+graphify-out/
