@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="RavynLynx"
-run/main_scene="res://node_2d.tscn"
+run/main_scene="uid://bw7yyox0cf4da"
 config/features=PackedStringArray("4.6", "Forward Plus")
 run/low_processor_mode_sleep_usec=0
 config/icon="res://icon.svg"
@@ -20,6 +20,10 @@ config/icon="res://icon.svg"
 
 window/size/always_on_top=true
 window/per_pixel_transparency/allowed=true
+
+[editor]
+
+movie_writer/movie_file="D:/RVN/ravyn.avi"
 
 [physics]
 

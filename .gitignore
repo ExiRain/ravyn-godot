@@ -15,3 +15,7 @@ Thumbs.db
 
 # Editor temp files
 *.tmp
+
+# Executables
+*.exe
+*.pck

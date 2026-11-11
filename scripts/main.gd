@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 1.5
+const SCRIPT_VERSION = 1.6
 
 # =========================================================
 # MODEL
@@ -11,6 +11,11 @@ const SCRIPT_VERSION = 1.5
 @onready var ears_node                          = $Sprite2D/GDCubismUserModel/Ears
 @onready var eyes_node                          = $Sprite2D/GDCubismUserModel/Eyes
 @onready var idle_node                     = $Sprite2D/GDCubismUserModel/Idle
+
+# The node that actually draws her, for ghost mode's fade. If modulate on the
+# Sprite2D turns out not to affect the Cubism render in your setup, point this
+# at `self` instead — the fade only ever touches `modulate.a`.
+@onready var avatar         : CanvasItem        = $Sprite2D
 
 var model_ready := false
 
@@ -35,6 +40,37 @@ var phoneme_timeline: Array = []
 var mouth_queue     : Array = []
 var mouth_interval  := 0.1
 var audio_duration  := 0.0
+var reconnect_timer := 0.0
+var reconnect_interval := 3.0
+
+# The audio server runs on the PC (AUDIO_SERVER_HOST = "0.0.0.0", port 9000)
+# and so does Godot, so localhost is right. 192.168.1.154 is the NOTEBOOK —
+# that was correct only while the notebook did TTS, which it has not for a
+# while. If Godot ever runs on another machine, this becomes the PC's IP.
+var ws_url := "ws://localhost:9000/ws/audio"
+
+# The rate the PCM actually arrives at. The PC sends RATE:<int> with the first
+# sentence of every utterance; this default is what an older PC build, which
+# sends none, is assumed to be using.
+var sample_rate := 24000
+
+# =========================================================
+# GHOST MODE
+# =========================================================
+#
+# The PC sends SHOW:percent:fade_ms before START and after END when it is
+# started with --ghost, and sends nothing at all otherwise — so `ghost_mode`
+# stays false and none of this runs.
+#
+# Visibility follows the UTTERANCE, not the amplitude: alpha driven from MOUTH
+# would strobe, because speech hits zero between syllables several times a
+# word. MOUTH keeps doing the mouth.
+
+var ghost_mode    := false
+var fade_from     := 1.0
+var fade_to       := 1.0
+var fade_elapsed  := 0.0
+var fade_duration := 0.0
 
 # =========================================================
 # BREATH
@@ -52,7 +88,7 @@ func _ready():
 	print("Ravyn avatar script version:", SCRIPT_VERSION)
 	randomize()
 	print("Connecting WebSocket")
-	socket.connect_to_url("ws://localhost:9000/ws/audio")
+	socket.connect_to_url(ws_url)
 	call_deferred("_wait_for_model")
 
 
@@ -87,6 +123,7 @@ func _process(delta):
 
 	_handle_websocket()
 	breathe(delta)
+	_update_visibility(delta)
 	_update_lipsync()
 	model.advance(delta)
 
@@ -97,89 +134,161 @@ func _process(delta):
 
 func _handle_websocket():
 	socket.poll()
+	var state = socket.get_ready_state()
 
-	if socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
+	if state == WebSocketPeer.STATE_OPEN:
+		reconnect_timer = 0.0
+		socket.send_text("ping")
+
+		while socket.get_available_packet_count():
+			var pkt = socket.get_packet()
+
+			if socket.was_string_packet():
+				var msg = pkt.get_string_from_utf8()
+
+				if msg == "START":
+					talking         = true
+					first_chunk     = true
+					receiving_audio = true
+					audio_buffer    = PackedByteArray()
+					mouth_queue.clear()
+					phoneme_timeline.clear()
+					ears_node.perk_up()
+					idle_node.start_talking()
+
+				elif msg == "END":
+					talking         = false
+					receiving_audio = false
+					idle_node.stop_talking()
+					_prepare_audio()
+
+				elif msg.begins_with("MOOD:"):
+					var value = float(msg.split(":")[1])
+					eyes_node.set_mood(float(msg.split(":")[1]))
+					idle_node.set_mood(value)
+
+				elif msg.begins_with("TIRED:"):
+					var value = float(msg.split(":")[1])
+					eyes_node.set_tired(float(msg.split(":")[1]))
+					idle_node.set_tired(value)
+
+				# Ghost mode: SHOW:percent:fade_ms. Sent only with --ghost.
+				elif msg.begins_with("SHOW:"):
+					var show_parts = msg.split(":")
+					if show_parts.size() >= 3:
+						_set_visibility(
+							float(show_parts[1]) / 100.0,
+							float(show_parts[2]) / 1000.0)
+
+				# The rate the PCM is at, sent once per utterance with the
+				# first sentence. Hardcoding 24000 was only right while the
+				# TTS happened to run there.
+				elif msg.begins_with("RATE:"):
+					var rate_parts = msg.split(":")
+					if rate_parts.size() >= 2:
+						var rate = int(rate_parts[1])
+						if rate > 0:
+							sample_rate = rate
+
+				elif msg.begins_with("PHONEME:"):
+					var parts = msg.split(":")
+					if parts.size() >= 3:
+						var word_phoneme = parts[1]
+						var t            = float(parts[2])
+						var chars        = []
+						var i            = 0
+						while i < word_phoneme.length():
+							if i + 1 < word_phoneme.length():
+								var two = word_phoneme.substr(i, 2)
+								if two in ["oʊ","eɪ","aɪ","ɔː","uː","iː","ɑː"]:
+									chars.append(two)
+									i += 2
+									continue
+							chars.append(word_phoneme[i])
+							i += 1
+						var char_duration = 0.18
+						for idx in range(chars.size()):
+							phoneme_timeline.append({
+								"p": chars[idx],
+								"t": t + idx * char_duration
+							})
+
+				elif msg.begins_with("MOUTH:"):
+					var raw         = float(msg.split(":")[1])
+					var amp         = clamp(raw * 8.0, 0.0, 1.0)
+					var open: float = amp
+					var form: float = 0.0
+					if amp < 0.1:
+						form = 0.0
+					elif amp < 0.3:
+						form = -0.35
+					elif amp < 0.6:
+						form = -0.1
+					else:
+						form = 0.8
+					mouth_queue.append({ "open": open, "form": form })
+
+			else:
+				if receiving_audio:
+					if first_chunk:
+						audio_buffer.append_array(pkt)
+						first_chunk = false
+					else:
+						audio_buffer.append_array(pkt)
+
+	elif state == WebSocketPeer.STATE_CLOSED or state ==  WebSocketPeer.STATE_CLOSING:
+		reconnect_timer += get_process_delta_time()
+		if reconnect_timer >= reconnect_interval:
+			reconnect_timer = 0.0
+			print("Reconnect WebSocket...")
+			socket = WebSocketPeer.new()
+			socket.connect_to_url(ws_url)
+
+
+# =========================================================
+# GHOST MODE — FADE
+# =========================================================
+
+func _set_visibility(target: float, seconds: float) -> void:
+	if avatar == null:
 		return
 
-	socket.send_text("ping")
+	# The first SHOW is what turns ghost mode on. Before one arrives she is
+	# simply visible, which is what a stream without --ghost wants and what an
+	# older PC build gives.
+	if not ghost_mode:
+		ghost_mode = true
+		print("Ghost mode on (the PC is sending SHOW)")
 
-	while socket.get_available_packet_count():
-		var pkt = socket.get_packet()
+	fade_from     = avatar.modulate.a
+	fade_to       = clamp(target, 0.0, 1.0)
+	fade_duration = max(seconds, 0.0)
+	fade_elapsed  = 0.0
 
-		if socket.was_string_packet():
-			var msg = pkt.get_string_from_utf8()
+	# A zero-length fade is a snap, not a division by zero.
+	if fade_duration <= 0.0:
+		_apply_alpha(fade_to)
 
-			if msg == "START":
-				talking         = true
-				first_chunk     = true
-				receiving_audio = true
-				audio_buffer    = PackedByteArray()
-				mouth_queue.clear()
-				phoneme_timeline.clear()
-				ears_node.perk_up()
-				idle_node.start_talking()
 
-			elif msg == "END":
-				talking         = false
-				receiving_audio = false
-				idle_node.stop_talking()
-				_prepare_audio()
+func _update_visibility(delta: float) -> void:
+	if not ghost_mode or avatar == null:
+		return
+	if fade_duration <= 0.0 or fade_elapsed >= fade_duration:
+		return
 
-			elif msg.begins_with("MOOD:"):
-				var value = float(msg.split(":")[1])
-				eyes_node.set_mood(float(msg.split(":")[1]))
-				idle_node.set_mood(value)
+	fade_elapsed += delta
+	var t = clamp(fade_elapsed / fade_duration, 0.0, 1.0)
 
-			elif msg.begins_with("TIRED:"):
-				var value = float(msg.split(":")[1])
-				eyes_node.set_tired(float(msg.split(":")[1]))
-				idle_node.set_tired(value)
+	# Smoothstep rather than linear: over 200ms a linear fade starts and stops
+	# abruptly enough to read as a cut.
+	t = t * t * (3.0 - 2.0 * t)
+	_apply_alpha(lerp(fade_from, fade_to, t))
 
-			elif msg.begins_with("PHONEME:"):
-				var parts = msg.split(":")
-				if parts.size() >= 3:
-					var word_phoneme = parts[1]
-					var t            = float(parts[2])
-					var chars        = []
-					var i            = 0
-					while i < word_phoneme.length():
-						if i + 1 < word_phoneme.length():
-							var two = word_phoneme.substr(i, 2)
-							if two in ["oʊ","eɪ","aɪ","ɔː","uː","iː","ɑː"]:
-								chars.append(two)
-								i += 2
-								continue
-						chars.append(word_phoneme[i])
-						i += 1
-					var char_duration = 0.18
-					for idx in range(chars.size()):
-						phoneme_timeline.append({
-							"p": chars[idx],
-							"t": t + idx * char_duration
-						})
 
-			elif msg.begins_with("MOUTH:"):
-				var raw         = float(msg.split(":")[1])
-				var amp         = clamp(raw * 8.0, 0.0, 1.0)
-				var open: float = amp
-				var form: float = 0.0
-				if amp < 0.1:
-					form = 0.0
-				elif amp < 0.3:
-					form = -0.35
-				elif amp < 0.6:
-					form = -0.1
-				else:
-					form = 0.8
-				mouth_queue.append({ "open": open, "form": form })
-
-		else:
-			if receiving_audio:
-				if first_chunk:
-					audio_buffer.append_array(pkt)
-					first_chunk = false
-				else:
-					audio_buffer.append_array(pkt)
+func _apply_alpha(value: float) -> void:
+	var tint = avatar.modulate
+	tint.a = clamp(value, 0.0, 1.0)
+	avatar.modulate = tint
 
 
 # =========================================================
@@ -194,10 +303,10 @@ func _prepare_audio():
 	var stream     := AudioStreamWAV.new()
 	stream.data    = pcm
 	stream.format  = AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate = 24000
+	stream.mix_rate = sample_rate
 	stream.stereo  = false
 
-	audio_duration = float(pcm.size()) / float(24000 * 2)
+	audio_duration = float(pcm.size()) / float(sample_rate * 2)
 
 	if mouth_queue.size() > 1:
 		mouth_interval = audio_duration / float(mouth_queue.size() - 1)
@@ -227,7 +336,7 @@ func _update_lipsync():
 	var stream        = player.stream as AudioStreamWAV
 
 	if stream and stream.data.size() > 0:
-		var sample_idx = int(playback_pos * 24000)
+		var sample_idx = int(playback_pos * sample_rate)
 		var window     := 128
 		var byte_start = clamp((sample_idx - window / 2) * 2, 0, stream.data.size() - 2)
 		var byte_end   = clamp(byte_start + window * 2, 0, stream.data.size())
