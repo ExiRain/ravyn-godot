@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 1.8
+const SCRIPT_VERSION = 1.9
 
 # =========================================================
 # MODEL
@@ -51,6 +51,14 @@ const STATE_TALKING_S := 0.5
 const STATE_IDLE_S    := 3.0
 var state_timer       := 0.0
 var was_playing       := false
+
+# She keeps her talking stance (eyes and head on him, no idle wandering, no
+# micro expressions) until her voice has actually finished. END only means
+# the last audio chunk has ARRIVED: the line is played after it. Calling
+# stop_talking() at END released her the moment she started speaking — the
+# 2026-11-12 avatar log had attention on him in 0 of 577 samples taken
+# while her voice played, and idle looks in most of them.
+var hold_talking_stance := false
 
 # The audio server runs on the PC (AUDIO_SERVER_HOST = "0.0.0.0", port 9000)
 # and so does Godot, so localhost is right. 192.168.1.154 is the NOTEBOOK —
@@ -135,6 +143,7 @@ func _process(delta):
 	breathe(delta)
 	_update_visibility(delta)
 	_update_lipsync()
+	_update_talking_stance()
 	_log_state(delta)
 	model.advance(delta)
 
@@ -173,13 +182,20 @@ func _handle_websocket():
 					phoneme_timeline.clear()
 					ears_node.perk_up()
 					idle_node.start_talking()
+					# A new line while the last one still plays keeps the
+					# stance; its own END decides when to let go.
+					hold_talking_stance = false
 					ActionLog.add("talk_start")
 
 				elif msg == "END":
 					talking         = false
 					receiving_audio = false
-					idle_node.stop_talking()
 					_prepare_audio()
+					# Released when her voice ends — see _update_talking_stance.
+					# Nothing to play (an empty line) releases her now.
+					hold_talking_stance = player.playing
+					if not hold_talking_stance:
+						idle_node.stop_talking()
 					ActionLog.add("talk_end", {
 						"audio_s": snappedf(audio_duration, 0.01),
 						"phonemes": phoneme_timeline.size(),
@@ -321,6 +337,16 @@ func _update_visibility(delta: float) -> void:
 # =========================================================
 # ACTION LOG — HER STATE, ON A CLOCK
 # =========================================================
+
+# =========================================================
+# TALKING STANCE — HELD UNTIL HER VOICE ENDS
+# =========================================================
+
+func _update_talking_stance() -> void:
+	if hold_talking_stance and not player.playing:
+		hold_talking_stance = false
+		idle_node.stop_talking()
+
 
 func _log_state(delta: float) -> void:
 	var playing: bool = player.playing
