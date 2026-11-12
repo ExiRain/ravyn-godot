@@ -22,12 +22,19 @@ const MAX_PER_MESSAGE := 100
 static var _pending: Array = []
 static var _dropped := 0
 
+# The PC's req_id for the line being spoken (LINE:<id>, sent before START),
+# stamped on every record until her voice stops. It is what joins this log
+# to logs/pc/ and logs/nb/ line for line.
+static var line_id := ""
+
 
 static func add(kind: String, data: Dictionary = {}) -> void:
 	if _pending.size() >= MAX_PENDING:
 		_pending.pop_front()
 		_dropped += 1
 	var record := {"t": Time.get_unix_time_from_system(), "kind": kind}
+	if line_id != "":
+		record["req_id"] = line_id
 	record.merge(data)
 	_pending.append(record)
 

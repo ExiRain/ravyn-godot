@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 1.7
+const SCRIPT_VERSION = 1.8
 
 # =========================================================
 # MODEL
@@ -43,6 +43,14 @@ var audio_duration  := 0.0
 var reconnect_timer := 0.0
 var reconnect_interval := 3.0
 var ws_connected    := false    # for the action log: say it once, not per frame
+
+# What she actually looks like, written to the action log on a clock: twice a
+# second while her voice plays, every few seconds otherwise. Sampled, not
+# per frame — enough to see where her eyes and head were during each line.
+const STATE_TALKING_S := 0.5
+const STATE_IDLE_S    := 3.0
+var state_timer       := 0.0
+var was_playing       := false
 
 # The audio server runs on the PC (AUDIO_SERVER_HOST = "0.0.0.0", port 9000)
 # and so does Godot, so localhost is right. 192.168.1.154 is the NOTEBOOK —
@@ -127,6 +135,7 @@ func _process(delta):
 	breathe(delta)
 	_update_visibility(delta)
 	_update_lipsync()
+	_log_state(delta)
 	model.advance(delta)
 
 
@@ -151,7 +160,11 @@ func _handle_websocket():
 			if socket.was_string_packet():
 				var msg = pkt.get_string_from_utf8()
 
-				if msg == "START":
+				# Which line this is: the PC's req_id, sent before START.
+				if msg.begins_with("LINE:"):
+					ActionLog.line_id = msg.substr(5)
+
+				elif msg == "START":
 					talking         = true
 					first_chunk     = true
 					receiving_audio = true
@@ -303,6 +316,50 @@ func _update_visibility(delta: float) -> void:
 	# abruptly enough to read as a cut.
 	t = t * t * (3.0 - 2.0 * t)
 	_apply_alpha(lerp(fade_from, fade_to, t))
+
+
+# =========================================================
+# ACTION LOG — HER STATE, ON A CLOCK
+# =========================================================
+
+func _log_state(delta: float) -> void:
+	var playing: bool = player.playing
+	if playing and not was_playing:
+		ActionLog.add("voice_start")
+		state_timer = STATE_TALKING_S      # sample at once
+	elif was_playing and not playing:
+		_log_state_now("state")
+		ActionLog.add("voice_end")
+		ActionLog.line_id = ""
+	was_playing = playing
+
+	state_timer += delta
+	if state_timer >= (STATE_TALKING_S if playing else STATE_IDLE_S):
+		state_timer = 0.0
+		_log_state_now("state")
+
+
+func _log_state_now(kind: String) -> void:
+	ActionLog.add(kind, {
+		"voice": player.playing,
+		"talking": idle_node.talking,
+		"focus": idle_node.looking_at_user,
+		"group": idle_node.current_group,
+		"wandering": idle_node.looking or idle_node.holding,
+		"expression": eyes_node.Expressions.keys()[eyes_node.current_expression],
+		"face_override": eyes_node.face_override,
+		"micro": idle_node.micro_active,
+		"mood": snappedf(eyes_node.mood, 0.01),
+		"tired": snappedf(eyes_node.tired, 0.01),
+		"eye": [_value(idle_node.eyeX_param), _value(idle_node.eyeY_param)],
+		"head": [_value(idle_node.headX_param), _value(idle_node.headY_param),
+				 _value(idle_node.headZ_param)],
+		"alpha": snappedf(avatar.modulate.a, 0.01) if avatar else 1.0,
+	})
+
+
+func _value(param) -> float:
+	return snappedf(param.value, 0.01) if param else 0.0
 
 
 func _apply_alpha(value: float) -> void:
