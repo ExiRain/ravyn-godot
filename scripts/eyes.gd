@@ -224,6 +224,8 @@ func _update_blink(delta: float):
 	else:
 		blink_timer += delta
 		if blink_timer >= blink_next:
+			# A wait this short is the second half of a double blink.
+			ActionLog.add("blink", {"double": blink_next < 0.5})
 			blink_timer   = 0.0
 			blink_elapsed = 0.0
 			blinking      = true
@@ -267,6 +269,8 @@ func _update_eye_color(delta: float):
 			eye_color_target     = 1.0 - eye_color_target
 			eye_color_transition = 0.0
 			eye_color_active     = true
+			ActionLog.add("eye_color", {
+				"to": "red" if eye_color_target > 0.5 else "blue"})
 	else:
 		eye_color_transition += delta
 		var t = clamp(eye_color_transition / EYE_COLOR_DURATION, 0.0, 1.0)
@@ -310,6 +314,8 @@ func set_tired(value: float):
 
 
 func set_expression(expr: Expressions):
+	if expr != current_expression:
+		ActionLog.add("expression", {"name": Expressions.keys()[expr]})
 	current_expression = expr
 	_update_ceiling()
 
@@ -322,6 +328,7 @@ func do_wink(left: bool = true):
 func prepare_surprised():
 	"""Called for subs/follows — wide eyes + raised brows, then auto-revert."""
 	face_override = true
+	ActionLog.add("face_override", {"name": "SURPRISED"})
 	set_expression(Expressions.SURPRISED)
 	# auto-revert after 2 seconds
 	await get_tree().create_timer(2.0).timeout
