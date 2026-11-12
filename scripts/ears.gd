@@ -53,6 +53,7 @@ func perk_up():
 	perk_elapsed = 0.0
 	l_jiggling   = false
 	r_jiggling   = false
+	ActionLog.add("ear_perk")
 
 
 func _on_process(model: GDCubismUserModel, delta: float):
@@ -80,6 +81,7 @@ func _on_process(model: GDCubismUserModel, delta: float):
 				l_jiggling = true
 				l_elapsed  = 0.0
 				l_timer    = 0.0
+				ActionLog.add("ear_jiggle", {"side": "left"})
 		else:
 			l_elapsed       += delta
 			ear_jig_l.value  = sin((l_elapsed / JIGGLE_DURATION) * PI) * JIGGLE_AMOUNT
@@ -96,6 +98,7 @@ func _on_process(model: GDCubismUserModel, delta: float):
 				r_jiggling = true
 				r_elapsed  = 0.0
 				r_timer    = 0.0
+				ActionLog.add("ear_jiggle", {"side": "right"})
 		else:
 			r_elapsed       += delta
 			ear_jig_r.value  = sin((r_elapsed / JIGGLE_DURATION) * PI) * JIGGLE_AMOUNT

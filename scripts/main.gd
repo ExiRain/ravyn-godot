@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 1.6
+const SCRIPT_VERSION = 1.7
 
 # =========================================================
 # MODEL
@@ -42,6 +42,7 @@ var mouth_interval  := 0.1
 var audio_duration  := 0.0
 var reconnect_timer := 0.0
 var reconnect_interval := 3.0
+var ws_connected    := false    # for the action log: say it once, not per frame
 
 # The audio server runs on the PC (AUDIO_SERVER_HOST = "0.0.0.0", port 9000)
 # and so does Godot, so localhost is right. 192.168.1.154 is the NOTEBOOK —
@@ -89,6 +90,7 @@ func _ready():
 	randomize()
 	print("Connecting WebSocket")
 	socket.connect_to_url(ws_url)
+	ActionLog.add("avatar_start", {"version": SCRIPT_VERSION})
 	call_deferred("_wait_for_model")
 
 
@@ -139,6 +141,9 @@ func _handle_websocket():
 	if state == WebSocketPeer.STATE_OPEN:
 		reconnect_timer = 0.0
 		socket.send_text("ping")
+		if not ws_connected:
+			ws_connected = true
+			ActionLog.add("connected")
 
 		while socket.get_available_packet_count():
 			var pkt = socket.get_packet()
@@ -155,22 +160,29 @@ func _handle_websocket():
 					phoneme_timeline.clear()
 					ears_node.perk_up()
 					idle_node.start_talking()
+					ActionLog.add("talk_start")
 
 				elif msg == "END":
 					talking         = false
 					receiving_audio = false
 					idle_node.stop_talking()
 					_prepare_audio()
+					ActionLog.add("talk_end", {
+						"audio_s": snappedf(audio_duration, 0.01),
+						"phonemes": phoneme_timeline.size(),
+						"mouth_frames": mouth_queue.size()})
 
 				elif msg.begins_with("MOOD:"):
 					var value = float(msg.split(":")[1])
 					eyes_node.set_mood(float(msg.split(":")[1]))
 					idle_node.set_mood(value)
+					ActionLog.add("mood", {"value": value})
 
 				elif msg.begins_with("TIRED:"):
 					var value = float(msg.split(":")[1])
 					eyes_node.set_tired(float(msg.split(":")[1]))
 					idle_node.set_tired(value)
+					ActionLog.add("tired", {"value": value})
 
 				# Ghost mode: SHOW:percent:fade_ms. Sent only with --ghost.
 				elif msg.begins_with("SHOW:"):
@@ -179,6 +191,9 @@ func _handle_websocket():
 						_set_visibility(
 							float(show_parts[1]) / 100.0,
 							float(show_parts[2]) / 1000.0)
+						ActionLog.add("visibility", {
+							"percent": int(show_parts[1]),
+							"fade_ms": int(show_parts[2])})
 
 				# The rate the PCM is at, sent once per utterance with the
 				# first sentence. Hardcoding 24000 was only right while the
@@ -236,7 +251,12 @@ func _handle_websocket():
 					else:
 						audio_buffer.append_array(pkt)
 
+		ActionLog.flush(socket)
+
 	elif state == WebSocketPeer.STATE_CLOSED or state ==  WebSocketPeer.STATE_CLOSING:
+		if ws_connected:
+			ws_connected = false
+			ActionLog.add("disconnected")
 		reconnect_timer += get_process_delta_time()
 		if reconnect_timer >= reconnect_interval:
 			reconnect_timer = 0.0

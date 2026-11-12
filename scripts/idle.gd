@@ -238,6 +238,7 @@ func _evaluate_group_switch():
 		current_group  = new_group
 		turns_in_group = 0
 		print("Group switched to: ", current_group)
+		ActionLog.add("look_group", {"group": current_group})
 
 
 # =========================================================
@@ -252,6 +253,7 @@ func _update_attention():
 	if not attention_triggered:
 		# first frame — fire the tween for smooth transition IN
 		attention_triggered = true
+		ActionLog.add("attention")
 		var tween = get_tree().get_root().create_tween()
 		tween.set_parallel(true)
 		tween.set_ease(Tween.EASE_IN_OUT)
@@ -328,7 +330,8 @@ func _start_look():
 	look_elapsed = 0.0
 
 	var presets = USER_FOCUS_GROUP_PRESETS if current_group == "USER_FOCUS" else WANDERING_GROUP_PRESETS
-	var preset  = presets[randi() % presets.size()]
+	var preset_index = randi() % presets.size()
+	var preset  = presets[preset_index]
 	var roll    = randf()
 
 	if tired > 0.5:
@@ -352,6 +355,9 @@ func _start_look():
 						 headZ_param.value if headZ_param else 0.0)
 	eye_target  = preset["eye"]
 	head_target = preset["head"]
+	ActionLog.add("look", {
+		"group": current_group, "preset": preset_index,
+		"duration_s": snappedf(look_duration, 0.01)})
 
 
 # =========================================================
@@ -402,6 +408,9 @@ func _trigger_micro():
 		return
 
 	eyes_node.set_expression(picked["expr"])
+	ActionLog.add("micro_expression", {
+		"name": eyes_node.Expressions.keys()[picked["expr"]],
+		"duration_s": snappedf(picked["dur"], 0.01)})
 	micro_active  = true
 	micro_elapsed = 0.0
 	micro_timeout = picked["dur"]
@@ -479,6 +488,7 @@ func _trigger_brow_asym():
 		_schedule_brow_asym()
 		return
 
+	ActionLog.add("brow_asym")
 	brow_asym_active  = true
 	brow_asym_elapsed = 0.0
 	brow_asym_timeout = randf_range(3.0, 7.0)
@@ -539,6 +549,7 @@ func _trigger_mouth_flicker():
 		_schedule_mouth_flicker()
 		return
 
+	ActionLog.add("mouth_flicker")
 	mouth_flicker_active  = true
 	mouth_flicker_elapsed = 0.0
 	mouth_flicker_timeout = randf_range(3.0, 7.0)
