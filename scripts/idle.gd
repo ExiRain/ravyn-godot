@@ -183,6 +183,51 @@ var mouth_flicker_timer   := 0.0
 var mouth_flicker_next    := 0.0
 
 
+# =========================================================
+# SLEEP
+# =========================================================
+# Idle for a minute, she may doze off: 50% at the first minute, +10% for
+# each minute after, until she does. Falling asleep is slow — the head sinks
+# and tilts, the eyelids droop with a few heavy-lidded fights against it —
+# then she breathes, head bobbing slightly. Every pose, speed and bob is
+# rolled fresh, so no two naps look the same.
+#
+# START wakes her (wake_up, from start_talking): a wide-eyed flash, then
+# normal eyes, while the attention tween brings her head back to centre —
+# all before her voice starts, which is after END.
+
+const SLEEP_FIRST_CHECK_S := 60.0
+const SLEEP_CHECK_EVERY_S := 60.0
+const SLEEP_FIRST_CHANCE  := 0.5
+const SLEEP_CHANCE_STEP   := 0.1
+
+const WAKE_OPEN_S  := 0.12      # lids fly open
+const WAKE_WIDE_S  := 0.35      # held wide
+const WAKE_EASE_S  := 0.35      # back to normal
+const WAKE_WIDE    := 1.35
+
+enum Sleep { AWAKE, FALLING, ASLEEP, WAKING }
+var sleep_state     := Sleep.AWAKE
+var idle_elapsed    := 0.0
+var sleep_checks    := 0
+var sleep_elapsed   := 0.0
+var sleep_duration  := 0.0
+var sleep_started_t := 0.0
+var sleep_head_from := Vector3.ZERO
+var sleep_head_to   := Vector3.ZERO
+var sleep_eye_from  := 1.0
+var sleep_eye_to    := Vector2.ZERO
+var sleep_fights    := 3.0      # heavy-lid dips while falling asleep
+var sleep_bob_phase := 0.0
+var sleep_bob_speed := 1.0
+var sleep_bob_depth := 1.0
+var wake_elapsed    := 0.0
+var wake_eye_from   := 0.0
+
+# Lid openness while sleep owns her eyes (read by eyes.gd), -1 when not.
+var sleep_eyes      := -1.0
+
+
 func _ready():
 	cubism_init.connect(_on_init)
 	cubism_process.connect(_on_process)
@@ -210,6 +255,12 @@ func _on_init(model: GDCubismUserModel):
 
 
 func _on_process(model: GDCubismUserModel, delta: float):
+	if sleep_state == Sleep.FALLING or sleep_state == Sleep.ASLEEP:
+		_update_sleep(delta)
+		return
+	if sleep_state == Sleep.WAKING:
+		_update_wake(delta)
+
 	if looking_at_user:
 		_update_attention()
 	else:
@@ -218,6 +269,139 @@ func _on_process(model: GDCubismUserModel, delta: float):
 			_update_micro(delta)
 			_update_brow_asym(delta)
 			_update_mouth_flicker(delta)
+			_update_sleep_clock(delta)
+
+
+# =========================================================
+# SLEEP — CLOCK, FALLING, BREATHING, WAKING
+# =========================================================
+
+func _update_sleep_clock(delta: float):
+	idle_elapsed += delta
+	if idle_elapsed < SLEEP_FIRST_CHECK_S + sleep_checks * SLEEP_CHECK_EVERY_S:
+		return
+	var chance = min(1.0, SLEEP_FIRST_CHANCE + sleep_checks * SLEEP_CHANCE_STEP)
+	sleep_checks += 1
+	var hit = randf() < chance
+	ActionLog.add("sleep_check", {
+		"idle_s": snappedf(idle_elapsed, 1.0), "chance": chance, "hit": hit})
+	if hit:
+		_fall_asleep()
+
+
+func _reset_sleep_clock():
+	idle_elapsed = 0.0
+	sleep_checks = 0
+
+
+func _fall_asleep():
+	sleep_state     = Sleep.FALLING
+	sleep_elapsed   = 0.0
+	sleep_started_t = Time.get_unix_time_from_system()
+	sleep_duration  = randf_range(6.0, 10.0)
+
+	# Whatever idle was doing stops where it is.
+	looking              = false
+	holding              = false
+	brow_asym_active     = false
+	mouth_flicker_active = false
+	micro_active         = false
+
+	sleep_head_from = Vector3(headX_param.value if headX_param else 0.0,
+							  headY_param.value if headY_param else 0.0,
+							  headZ_param.value if headZ_param else 0.0)
+	# Down, a little to one side, a little tilted: never the same twice.
+	sleep_head_to = Vector3(randf_range(-5.0, 5.0),
+							randf_range(-26.0, -17.0),
+							randf_range(-10.0, 10.0))
+	sleep_eye_to  = Vector2(randf_range(-0.15, 0.15), randf_range(-0.5, -0.2))
+	sleep_eye_from = 1.0
+	if eyes_node and eyes_node.eye_l_open:
+		sleep_eye_from = eyes_node.eye_l_open.value
+	sleep_fights    = float(randi_range(2, 4))
+	sleep_bob_phase = randf() * TAU
+	sleep_bob_speed = randf_range(0.9, 1.4)      # radians a second: slow breaths
+	sleep_bob_depth = randf_range(0.8, 1.8)
+
+	if eyes_node:
+		eyes_node.set_expression(eyes_node.Expressions.SLEEPY)
+	ActionLog.add("sleep_start", {
+		"duration_s": snappedf(sleep_duration, 0.1),
+		"head": [snappedf(sleep_head_to.x, 0.1), snappedf(sleep_head_to.y, 0.1),
+				 snappedf(sleep_head_to.z, 0.1)]})
+
+
+func _update_sleep(delta: float):
+	if sleep_state == Sleep.FALLING:
+		sleep_elapsed += delta
+		var t: float = clamp(sleep_elapsed / sleep_duration, 0.0, 1.0)
+		var ease_t   = t * t * (3.0 - 2.0 * t)
+
+		# Lids lag the head, then sink, dipping and recovering a few times —
+		# fighting it — with the fights fading as she goes under.
+		var lid_t: float = clamp((t - 0.15) / 0.85, 0.0, 1.0)
+		var fight = abs(sin(lid_t * PI * sleep_fights)) * 0.18 * (1.0 - lid_t)
+		sleep_eyes = clamp(lerp(sleep_eye_from, 0.0, pow(lid_t, 0.7)) + fight,
+						   0.0, 1.0)
+
+		var head = sleep_head_from.lerp(sleep_head_to, ease_t)
+		# A small catch near the end: the head drops, then settles.
+		head.y -= sin(clamp((t - 0.7) / 0.3, 0.0, 1.0) * PI) * 3.0
+		_apply_head(head)
+		_apply_eyeballs(Vector2.ZERO.lerp(sleep_eye_to, ease_t))
+
+		if t >= 1.0:
+			sleep_state = Sleep.ASLEEP
+			ActionLog.add("asleep")
+		return
+
+	# Asleep: eyes shut, slow breathing in the head.
+	sleep_eyes = 0.0
+	sleep_bob_phase += delta * sleep_bob_speed
+	_apply_head(sleep_head_to + Vector3(
+		sin(sleep_bob_phase * 0.37) * 0.4,
+		sin(sleep_bob_phase) * sleep_bob_depth,
+		sin(sleep_bob_phase * 0.5) * sleep_bob_depth * 0.4))
+
+
+# Called by start_talking(): she has something to say.
+func wake_up():
+	_reset_sleep_clock()
+	if sleep_state != Sleep.FALLING and sleep_state != Sleep.ASLEEP:
+		return
+	ActionLog.add("wake", {
+		"from": Sleep.keys()[sleep_state],
+		"slept_s": snappedf(Time.get_unix_time_from_system() - sleep_started_t, 0.1)})
+	sleep_state   = Sleep.WAKING
+	wake_elapsed  = 0.0
+	wake_eye_from = max(sleep_eyes, 0.0)
+	if eyes_node:
+		eyes_node.set_mood(eyes_node.mood)     # the face her mood calls for
+
+
+func _update_wake(delta: float):
+	wake_elapsed += delta
+	if wake_elapsed < WAKE_OPEN_S:
+		sleep_eyes = lerp(wake_eye_from, WAKE_WIDE, wake_elapsed / WAKE_OPEN_S)
+	elif wake_elapsed < WAKE_OPEN_S + WAKE_WIDE_S:
+		sleep_eyes = WAKE_WIDE
+	elif wake_elapsed < WAKE_OPEN_S + WAKE_WIDE_S + WAKE_EASE_S:
+		var t = (wake_elapsed - WAKE_OPEN_S - WAKE_WIDE_S) / WAKE_EASE_S
+		sleep_eyes = lerp(WAKE_WIDE, 1.0, t * t * (3.0 - 2.0 * t))
+	else:
+		sleep_eyes  = -1.0             # eyes.gd and blinking take over again
+		sleep_state = Sleep.AWAKE
+
+
+func _apply_head(head: Vector3):
+	if headX_param: headX_param.value = head.x
+	if headY_param: headY_param.value = head.y
+	if headZ_param: headZ_param.value = head.z
+
+
+func _apply_eyeballs(eye: Vector2):
+	if eyeX_param: eyeX_param.value = eye.x
+	if eyeY_param: eyeY_param.value = eye.y
 
 
 # =========================================================
@@ -574,6 +758,7 @@ func _schedule_mouth_flicker():
 # =========================================================
 
 func start_talking():
+	wake_up()
 	talking              = true
 	looking_at_user      = true
 	attention_triggered  = false
@@ -590,6 +775,7 @@ func start_talking():
 
 
 func stop_talking():
+	_reset_sleep_clock()
 	talking         = false
 	looking_at_user = false
 	look_timer      = 0.0
