@@ -583,7 +583,10 @@ func start_talking():
 	brow_asym_active     = false
 	if micro_active and eyes_node:
 		micro_active = false
-		eyes_node.set_expression(eyes_node.Expressions.NEUTRAL)
+		# Back to the face her mood calls for, not NEUTRAL: MOOD arrives
+		# before START, so NEUTRAL here wiped the expression it had just set
+		# (2026-11-12: a +0.90 cheer spoken with a neutral face).
+		eyes_node.set_mood(eyes_node.mood)
 
 
 func stop_talking():
