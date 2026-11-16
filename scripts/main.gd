@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 1.9
+const SCRIPT_VERSION = 2.1
 
 # =========================================================
 # MODEL
@@ -375,6 +375,7 @@ func _log_state_now(kind: String) -> void:
 		"expression": eyes_node.Expressions.keys()[eyes_node.current_expression],
 		"face_override": eyes_node.face_override,
 		"micro": idle_node.micro_active,
+		"sleep": idle_node.Sleep.keys()[idle_node.sleep_state],
 		"mood": snappedf(eyes_node.mood, 0.01),
 		"tired": snappedf(eyes_node.tired, 0.01),
 		"eye": [_value(idle_node.eyeX_param), _value(idle_node.eyeY_param)],
@@ -512,6 +513,10 @@ func _map_phoneme_to_viseme(p: String) -> Dictionary:
 
 func breathe(delta):
 	if not breath_param:
+		return
+	# Asleep, her chest follows the same breath as her head (idle.gd).
+	if idle_node.sleep_breath >= 0.0:
+		breath_param.value = idle_node.sleep_breath
 		return
 	breath_time       += delta * breath_speed
 	breath_param.value = (cos(breath_time) * -0.5) + 0.5

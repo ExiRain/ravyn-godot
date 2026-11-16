@@ -115,7 +115,14 @@ func _on_init(model: GDCubismUserModel):
 func _on_process(model: GDCubismUserModel, delta: float):
 	_update_ceiling()
 	_update_targets()
-	_update_blink(delta)
+	# Sleep owns the lids while she dozes off, sleeps and wakes (idle.gd).
+	if idle_node and idle_node.sleep_eyes >= 0.0:
+		if eye_l_open: eye_l_open.value = idle_node.sleep_eyes
+		if eye_r_open: eye_r_open.value = idle_node.sleep_eyes
+		blinking    = false
+		blink_timer = 0.0
+	else:
+		_update_blink(delta)
 	_smooth_apply(delta)
 	_update_eye_color(delta)
 
