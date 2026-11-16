@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 2.0
+const SCRIPT_VERSION = 2.1
 
 # =========================================================
 # MODEL
@@ -513,6 +513,10 @@ func _map_phoneme_to_viseme(p: String) -> Dictionary:
 
 func breathe(delta):
 	if not breath_param:
+		return
+	# Asleep, her chest follows the same breath as her head (idle.gd).
+	if idle_node.sleep_breath >= 0.0:
+		breath_param.value = idle_node.sleep_breath
 		return
 	breath_time       += delta * breath_speed
 	breath_param.value = (cos(breath_time) * -0.5) + 0.5
