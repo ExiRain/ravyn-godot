@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 2.1
+const SCRIPT_VERSION = 2.2
 
 # =========================================================
 # MODEL

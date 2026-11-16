@@ -117,8 +117,9 @@ func _on_process(model: GDCubismUserModel, delta: float):
 	_update_targets()
 	# Sleep owns the lids while she dozes off, sleeps and wakes (idle.gd).
 	if idle_node and idle_node.sleep_eyes >= 0.0:
-		if eye_l_open: eye_l_open.value = idle_node.sleep_eyes
-		if eye_r_open: eye_r_open.value = idle_node.sleep_eyes
+		# A peek while asleep opens one eye or both a little (idle.gd).
+		if eye_l_open: eye_l_open.value = idle_node.sleep_eyes + idle_node.sleep_peek.x
+		if eye_r_open: eye_r_open.value = idle_node.sleep_eyes + idle_node.sleep_peek.y
 		blinking    = false
 		blink_timer = 0.0
 	else:
@@ -312,6 +313,13 @@ func set_mood(value: float):
 		set_expression(Expressions.SAD)
 	else:
 		set_expression(Expressions.NEUTRAL)
+
+
+# The face mood AND tiredness call for. Restoring from mood alone showed SAD
+# where tired 0.80 wanted SLEEPY (2026-11-16, 21:08).
+func restore_face():
+	set_mood(mood)
+	set_tired(tired)
 
 
 func set_tired(value: float):
