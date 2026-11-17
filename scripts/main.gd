@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 2.3
+const SCRIPT_VERSION = 2.4
 
 # =========================================================
 # MODEL
@@ -176,6 +176,13 @@ func _handle_websocket():
 					if live != idle_node.in_game:
 						idle_node.in_game = live
 						ActionLog.add("game", {"live": live})
+
+				# Worn out (PC: temper sour or 3+ games): heavier lids.
+				elif msg.begins_with("WEARY:"):
+					var on: bool = msg.substr(6) == "1"
+					if on != (eyes_node.weary_target > 0.5):
+						eyes_node.set_weary(on)
+						ActionLog.add("weary", {"on": on})
 
 				# Which line this is: the PC's req_id, sent before START.
 				elif msg.begins_with("LINE:"):
@@ -383,6 +390,7 @@ func _log_state_now(kind: String) -> void:
 		"expression": eyes_node.Expressions.keys()[eyes_node.current_expression],
 		"face_override": eyes_node.face_override,
 		"micro": idle_node.micro_active,
+		"weary": snappedf(eyes_node.weary_amount, 0.01),
 		"sleep": idle_node.Sleep.keys()[idle_node.sleep_state],
 		"mood": snappedf(eyes_node.mood, 0.01),
 		"tired": snappedf(eyes_node.tired, 0.01),

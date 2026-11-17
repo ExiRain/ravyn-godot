@@ -32,6 +32,14 @@ var face_override := false   # true when FACE:SURPRISED is active
 var mood  := 0.0
 var tired := 0.0
 
+# Worn out: lids about 20% lower, all the time. The PC turns it on once her
+# temper sours or the session passes three games (WEARY:1). Eased in and
+# out over ~20s, so the change shows over a few blinks, not as a switch.
+const WEARY_LID_DROP := 0.2
+const WEARY_EASE_S   := 20.0
+var weary_target := 0.0
+var weary_amount := 0.0
+
 var eye_open_limit := 1.0
 
 # =========================================================
@@ -133,6 +141,9 @@ func _on_process(model: GDCubismUserModel, delta: float):
 # =========================================================
 
 func _update_ceiling():
+	var delta := get_process_delta_time()
+	weary_amount = move_toward(weary_amount, weary_target, delta / WEARY_EASE_S)
+
 	if face_override:
 		# FACE:SURPRISED was triggered — allow 1.4 briefly
 		eye_open_limit = 1.4
@@ -145,6 +156,14 @@ func _update_ceiling():
 		eye_open_limit = 1.4
 	else:
 		eye_open_limit = lerp(1.0, 0.75, tired)
+
+	# Surprise still opens her eyes wide; everything else sits lower.
+	if current_expression != Expressions.SURPRISED or talking:
+		eye_open_limit *= 1.0 - WEARY_LID_DROP * weary_amount
+
+
+func set_weary(on: bool):
+	weary_target = 1.0 if on else 0.0
 
 
 # =========================================================
