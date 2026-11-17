@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 2.2
+const SCRIPT_VERSION = 2.3
 
 # =========================================================
 # MODEL
@@ -169,8 +169,16 @@ func _handle_websocket():
 			if socket.was_string_packet():
 				var msg = pkt.get_string_from_utf8()
 
+				# Whether a League game is on: she waits longer before
+				# dozing off in one (idle.gd).
+				if msg.begins_with("GAME:"):
+					var live: bool = msg.substr(5) == "1"
+					if live != idle_node.in_game:
+						idle_node.in_game = live
+						ActionLog.add("game", {"live": live})
+
 				# Which line this is: the PC's req_id, sent before START.
-				if msg.begins_with("LINE:"):
+				elif msg.begins_with("LINE:"):
 					ActionLog.line_id = msg.substr(5)
 
 				elif msg == "START":

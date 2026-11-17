@@ -197,6 +197,10 @@ var mouth_flicker_next    := 0.0
 # all before her voice starts, which is after END.
 
 const SLEEP_FIRST_CHECK_S := 60.0
+# In a game the quiet stretches are part of the game, not nothing happening:
+# she holds out for two minutes before the first roll (2026-11-16: 26 naps,
+# many mid-game). The PC says when a game is on (GAME:1 / GAME:0).
+const SLEEP_FIRST_CHECK_IN_GAME_S := 120.0
 const SLEEP_CHECK_EVERY_S := 60.0
 const SLEEP_FIRST_CHANCE  := 0.5
 const SLEEP_CHANCE_STEP   := 0.1
@@ -234,6 +238,7 @@ const BREATH_DEPTH_MAX   := 4.0
 
 enum Sleep { AWAKE, FALLING, ASLEEP, WAKING }
 var sleep_state     := Sleep.AWAKE
+var in_game         := false    # set by main.gd from the PC's GAME:<0|1>
 var idle_elapsed    := 0.0
 var sleep_checks    := 0
 var sleep_elapsed   := 0.0
@@ -322,13 +327,15 @@ func _on_process(model: GDCubismUserModel, delta: float):
 
 func _update_sleep_clock(delta: float):
 	idle_elapsed += delta
-	if idle_elapsed < SLEEP_FIRST_CHECK_S + sleep_checks * SLEEP_CHECK_EVERY_S:
+	var first := SLEEP_FIRST_CHECK_IN_GAME_S if in_game else SLEEP_FIRST_CHECK_S
+	if idle_elapsed < first + sleep_checks * SLEEP_CHECK_EVERY_S:
 		return
 	var chance = min(1.0, SLEEP_FIRST_CHANCE + sleep_checks * SLEEP_CHANCE_STEP)
 	sleep_checks += 1
 	var hit = randf() < chance
 	ActionLog.add("sleep_check", {
-		"idle_s": snappedf(idle_elapsed, 1.0), "chance": chance, "hit": hit})
+		"idle_s": snappedf(idle_elapsed, 1.0), "chance": chance, "hit": hit,
+		"in_game": in_game})
 	if hit:
 		_fall_asleep()
 
