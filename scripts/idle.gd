@@ -197,15 +197,30 @@ var mouth_flicker_next    := 0.0
 # all before her voice starts, which is after END.
 
 const SLEEP_FIRST_CHECK_S := 60.0
+# In a game the quiet stretches are part of the game, not nothing happening:
+# she holds out for two minutes before the first roll (2026-11-16: 26 naps,
+# many mid-game). The PC says when a game is on (GAME:1 / GAME:0).
+const SLEEP_FIRST_CHECK_IN_GAME_S := 120.0
 const SLEEP_CHECK_EVERY_S := 60.0
 const SLEEP_FIRST_CHANCE  := 0.5
 const SLEEP_CHANCE_STEP   := 0.1
 
-const WAKE_OPEN_S  := 0.12      # lids fly open
-const WAKE_WIDE_S  := 0.35      # held wide
-const WAKE_EASE_S  := 0.35      # back to normal
-const WAKE_WIDE    := 1.35
-const WAKE_HEAD_S  := 0.9       # head back to centre when she wakes herself
+# Waking is a beat, not a jolt (2026-11-16: "a bit abrupt"): lids open over
+# half a second, a little wider than usual, then settle; the head comes up
+# over more than a second.
+const WAKE_OPEN_S  := 0.45      # lids open
+const WAKE_WIDE_S  := 0.25      # held a touch wide
+const WAKE_EASE_S  := 0.6       # back to normal
+const WAKE_WIDE    := 1.2
+const WAKE_HEAD_S  := 1.5       # head back to centre when she wakes herself
+const WAKE_ATTENTION_S := 1.2   # head to him when she wakes to speak (else 0.6)
+
+# Peeking while asleep: every 25-40s one eye or both open about a third of
+# the way — slowly — stay a moment, and sink shut again. 3-5s in all.
+const PEEK_EVERY_MIN_S := 25.0
+const PEEK_EVERY_MAX_S := 40.0
+const PEEK_OPEN_MIN    := 0.25
+const PEEK_OPEN_MAX    := 0.35
 
 # She opens asleep, and wakes herself after about a minute — or the moment
 # she has something to say.
@@ -223,6 +238,7 @@ const BREATH_DEPTH_MAX   := 4.0
 
 enum Sleep { AWAKE, FALLING, ASLEEP, WAKING }
 var sleep_state     := Sleep.AWAKE
+var in_game         := false    # set by main.gd from the PC's GAME:<0|1>
 var idle_elapsed    := 0.0
 var sleep_checks    := 0
 var sleep_elapsed   := 0.0
@@ -247,6 +263,14 @@ var wake_eye_from   := 0.0
 
 # Lid openness while sleep owns her eyes (read by eyes.gd), -1 when not.
 var sleep_eyes      := -1.0
+# Added per eye on top of sleep_eyes during a peek (x left, y right).
+var sleep_peek      := Vector2.ZERO
+var peek_wait       := 0.0
+var peek_elapsed    := -1.0     # < 0: not peeking
+var peek_open_s     := 1.0
+var peek_hold_s     := 1.5
+var peek_close_s    := 1.2
+var peek_target     := Vector2.ZERO
 
 
 func _ready():
@@ -303,13 +327,15 @@ func _on_process(model: GDCubismUserModel, delta: float):
 
 func _update_sleep_clock(delta: float):
 	idle_elapsed += delta
-	if idle_elapsed < SLEEP_FIRST_CHECK_S + sleep_checks * SLEEP_CHECK_EVERY_S:
+	var first := SLEEP_FIRST_CHECK_IN_GAME_S if in_game else SLEEP_FIRST_CHECK_S
+	if idle_elapsed < first + sleep_checks * SLEEP_CHECK_EVERY_S:
 		return
 	var chance = min(1.0, SLEEP_FIRST_CHANCE + sleep_checks * SLEEP_CHANCE_STEP)
 	sleep_checks += 1
 	var hit = randf() < chance
 	ActionLog.add("sleep_check", {
-		"idle_s": snappedf(idle_elapsed, 1.0), "chance": chance, "hit": hit})
+		"idle_s": snappedf(idle_elapsed, 1.0), "chance": chance, "hit": hit,
+		"in_game": in_game})
 	if hit:
 		_fall_asleep()
 
@@ -375,15 +401,60 @@ func _update_sleep(delta: float):
 
 		if t >= 1.0:
 			sleep_state = Sleep.ASLEEP
+			_schedule_peek()
 			ActionLog.add("asleep")
 		return
 
 	# Asleep: eyes shut, head rising and sinking with each breath.
 	sleep_eyes = 0.0
 	_apply_head(sleep_head_to + _breath_offset(delta))
+	_update_peek(delta)
 
 	if self_wake_at > 0.0 and Time.get_unix_time_from_system() >= self_wake_at:
 		wake_up()
+
+
+func _schedule_peek():
+	peek_wait    = randf_range(PEEK_EVERY_MIN_S, PEEK_EVERY_MAX_S)
+	peek_elapsed = -1.0
+	sleep_peek   = Vector2.ZERO
+
+
+func _update_peek(delta: float):
+	if peek_elapsed < 0.0:
+		peek_wait -= delta
+		if peek_wait > 0.0:
+			return
+		# Left, right, or both — each its own opening, never quite equal.
+		var which = randi() % 3
+		var amount = randf_range(PEEK_OPEN_MIN, PEEK_OPEN_MAX)
+		peek_target = Vector2(
+			amount if which != 1 else 0.0,
+			(amount * randf_range(0.85, 1.0)) if which != 0 else 0.0)
+		peek_open_s  = randf_range(0.8, 1.3)
+		peek_hold_s  = randf_range(1.0, 2.2)
+		peek_close_s = randf_range(1.0, 1.5)
+		peek_elapsed = 0.0
+		ActionLog.add("sleep_peek", {
+			"eye": ["left", "right", "both"][which],
+			"open": snappedf(amount, 0.01),
+			"total_s": snappedf(peek_open_s + peek_hold_s + peek_close_s, 0.1)})
+		return
+
+	peek_elapsed += delta
+	var k: float
+	if peek_elapsed < peek_open_s:
+		var t = peek_elapsed / peek_open_s
+		k = t * t * (3.0 - 2.0 * t)
+	elif peek_elapsed < peek_open_s + peek_hold_s:
+		k = 1.0
+	elif peek_elapsed < peek_open_s + peek_hold_s + peek_close_s:
+		var t = (peek_elapsed - peek_open_s - peek_hold_s) / peek_close_s
+		k = 1.0 - t * t * (3.0 - 2.0 * t)
+	else:
+		_schedule_peek()
+		return
+	sleep_peek = peek_target * k
 
 
 func _roll_breathing():
@@ -419,6 +490,7 @@ func _sleep_on_load():
 	_apply_eyeballs(Vector2(randf_range(-0.15, 0.15), randf_range(-0.5, -0.2)))
 	sleep_eyes      = 0.0
 	sleep_state     = Sleep.ASLEEP
+	_schedule_peek()
 	sleep_started_t = Time.get_unix_time_from_system()
 	self_wake_at    = sleep_started_t + randf_range(LOAD_SLEEP_MIN_S,
 													  LOAD_SLEEP_MAX_S)
@@ -442,7 +514,10 @@ func wake_up():
 		"slept_s": snappedf(Time.get_unix_time_from_system() - sleep_started_t, 0.1)})
 	sleep_state   = Sleep.WAKING
 	wake_elapsed  = 0.0
-	wake_eye_from = max(sleep_eyes, 0.0)
+	# A peek in progress is where her lids already are.
+	wake_eye_from = max(sleep_eyes, 0.0) + max(sleep_peek.x, sleep_peek.y)
+	sleep_peek    = Vector2.ZERO
+	peek_elapsed  = -1.0
 	sleep_breath  = -1.0
 	self_wake_at  = 0.0
 	wake_head_from = Vector3(headX_param.value if headX_param else 0.0,
@@ -453,7 +528,7 @@ func wake_up():
 	look_timer     = 0.0
 	next_look_time = randf_range(2.0, 4.0)
 	if eyes_node:
-		eyes_node.set_mood(eyes_node.mood)     # the face her mood calls for
+		eyes_node.restore_face()     # the face her mood and tiredness call for
 
 
 func _update_wake(delta: float):
@@ -464,7 +539,8 @@ func _update_wake(delta: float):
 		var h: float = clamp(wake_elapsed / WAKE_HEAD_S, 0.0, 1.0)
 		_apply_head(wake_head_from.lerp(Vector3.ZERO, h * h * (3.0 - 2.0 * h)))
 	if wake_elapsed < WAKE_OPEN_S:
-		sleep_eyes = lerp(wake_eye_from, WAKE_WIDE, wake_elapsed / WAKE_OPEN_S)
+		var o = wake_elapsed / WAKE_OPEN_S
+		sleep_eyes = lerp(wake_eye_from, WAKE_WIDE, o * o * (3.0 - 2.0 * o))
 	elif wake_elapsed < WAKE_OPEN_S + WAKE_WIDE_S:
 		sleep_eyes = WAKE_WIDE
 	elif wake_elapsed < WAKE_OPEN_S + WAKE_WIDE_S + WAKE_EASE_S:
@@ -520,15 +596,17 @@ func _update_attention():
 		# first frame — fire the tween for smooth transition IN
 		attention_triggered = true
 		ActionLog.add("attention")
+		# Coming up out of sleep, the head takes its time.
+		var dur := WAKE_ATTENTION_S if sleep_state == Sleep.WAKING else 0.6
 		var tween = get_tree().get_root().create_tween()
 		tween.set_parallel(true)
 		tween.set_ease(Tween.EASE_IN_OUT)
 		tween.set_trans(Tween.TRANS_CUBIC)
-		if eyeX_param:  tween.tween_property(eyeX_param,  "value", USER_LOOK_EYE.x,  0.6)
-		if eyeY_param:  tween.tween_property(eyeY_param,  "value", USER_LOOK_EYE.y,  0.6)
-		if headX_param: tween.tween_property(headX_param, "value", USER_LOOK_HEAD.x, 0.6)
-		if headY_param: tween.tween_property(headY_param, "value", USER_LOOK_HEAD.y, 0.6)
-		if headZ_param: tween.tween_property(headZ_param, "value", USER_LOOK_HEAD.z, 0.6)
+		if eyeX_param:  tween.tween_property(eyeX_param,  "value", USER_LOOK_EYE.x,  dur)
+		if eyeY_param:  tween.tween_property(eyeY_param,  "value", USER_LOOK_EYE.y,  dur)
+		if headX_param: tween.tween_property(headX_param, "value", USER_LOOK_HEAD.x, dur)
+		if headY_param: tween.tween_property(headY_param, "value", USER_LOOK_HEAD.y, dur)
+		if headZ_param: tween.tween_property(headZ_param, "value", USER_LOOK_HEAD.z, dur)
 	else:
 		# every subsequent frame — gently hold position
 		# this prevents any other system from pulling eyes away
@@ -853,7 +931,7 @@ func start_talking():
 		# Back to the face her mood calls for, not NEUTRAL: MOOD arrives
 		# before START, so NEUTRAL here wiped the expression it had just set
 		# (2026-11-12: a +0.90 cheer spoken with a neutral face).
-		eyes_node.set_mood(eyes_node.mood)
+		eyes_node.restore_face()
 
 
 func stop_talking():
