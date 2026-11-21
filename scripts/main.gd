@@ -1,6 +1,6 @@
 extends Node2D
 
-const SCRIPT_VERSION = 2.4
+const SCRIPT_VERSION = 2.5
 
 # =========================================================
 # MODEL
@@ -35,13 +35,20 @@ var socket          := WebSocketPeer.new()
 var audio_buffer    := PackedByteArray()
 var receiving_audio := false
 var talking         := false
-var first_chunk     := true
 var phoneme_timeline: Array = []
-var mouth_queue     : Array = []
-var mouth_interval  := 0.1
+var mouth_frames    := 0        # MOUTH messages this line — counted for the log only
 var audio_duration  := 0.0
 var reconnect_timer := 0.0
 var reconnect_interval := 3.0
+
+# A keepalive to the PC, which ignores it. Once a second is plenty: it used
+# to go out every frame, 60 times a second.
+const PING_INTERVAL_S := 1.0
+var ping_timer        := 0.0
+
+# How often to look whether the Live2D model has loaded. It used to be asked
+# every frame until it had.
+const MODEL_POLL_S := 0.1
 var ws_connected    := false    # for the action log: say it once, not per frame
 
 # What she actually looks like, written to the action log on a clock: twice a
@@ -115,10 +122,12 @@ func _ready():
 # =========================================================
 
 func _wait_for_model():
-	while model.get_parameters().is_empty():
-		await get_tree().process_frame
+	var params = model.get_parameters()
+	while params.is_empty():
+		await get_tree().create_timer(MODEL_POLL_S).timeout
+		params = model.get_parameters()
 
-	for p in model.get_parameters():
+	for p in params:
 		match p.id:
 			"ParamBreath":     breath_param = p
 			"ParamMouthOpenY": mouth_open   = p
@@ -158,7 +167,10 @@ func _handle_websocket():
 
 	if state == WebSocketPeer.STATE_OPEN:
 		reconnect_timer = 0.0
-		socket.send_text("ping")
+		ping_timer += get_process_delta_time()
+		if ping_timer >= PING_INTERVAL_S:
+			ping_timer = 0.0
+			socket.send_text("ping")
 		if not ws_connected:
 			ws_connected = true
 			ActionLog.add("connected")
@@ -190,10 +202,9 @@ func _handle_websocket():
 
 				elif msg == "START":
 					talking         = true
-					first_chunk     = true
 					receiving_audio = true
 					audio_buffer    = PackedByteArray()
-					mouth_queue.clear()
+					mouth_frames    = 0
 					phoneme_timeline.clear()
 					ears_node.perk_up()
 					idle_node.start_talking()
@@ -214,7 +225,7 @@ func _handle_websocket():
 					ActionLog.add("talk_end", {
 						"audio_s": snappedf(audio_duration, 0.01),
 						"phonemes": phoneme_timeline.size(),
-						"mouth_frames": mouth_queue.size()})
+						"mouth_frames": mouth_frames})
 
 				elif msg.begins_with("MOOD:"):
 					var value = float(msg.split(":")[1])
@@ -272,28 +283,13 @@ func _handle_websocket():
 								"t": t + idx * char_duration
 							})
 
+				# The mouth follows the audio itself (_update_lipsync) and the
+				# phonemes; MOUTH frames are only counted, for the action log.
 				elif msg.begins_with("MOUTH:"):
-					var raw         = float(msg.split(":")[1])
-					var amp         = clamp(raw * 8.0, 0.0, 1.0)
-					var open: float = amp
-					var form: float = 0.0
-					if amp < 0.1:
-						form = 0.0
-					elif amp < 0.3:
-						form = -0.35
-					elif amp < 0.6:
-						form = -0.1
-					else:
-						form = 0.8
-					mouth_queue.append({ "open": open, "form": form })
+					mouth_frames += 1
 
-			else:
-				if receiving_audio:
-					if first_chunk:
-						audio_buffer.append_array(pkt)
-						first_chunk = false
-					else:
-						audio_buffer.append_array(pkt)
+			elif receiving_audio:
+				audio_buffer.append_array(pkt)
 
 		ActionLog.flush(socket)
 
@@ -427,11 +423,6 @@ func _prepare_audio():
 	stream.stereo  = false
 
 	audio_duration = float(pcm.size()) / float(sample_rate * 2)
-
-	if mouth_queue.size() > 1:
-		mouth_interval = audio_duration / float(mouth_queue.size() - 1)
-	else:
-		mouth_interval = 0.1
 
 	player.stream = stream
 	player.play()
